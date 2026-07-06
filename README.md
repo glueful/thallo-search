@@ -1,33 +1,33 @@
-# lemma-search
+# thallo-search
 
-Public, delivery-parity **content search** for [Lemma](https://getlemma.dev), backed by
+Public, delivery-parity **content search** for [Thallo](https://thallo.dev), backed by
 [Meilisearch](https://www.meilisearch.com/) — shipped as a removable capability pack.
 
-lemma-search owns Lemma semantics (published-only visibility, `href`/`title`, lifecycle sync,
+thallo-search owns Thallo semantics (published-only visibility, `href`/`title`, lifecycle sync,
 the `ContentReindexer` seam); the `glueful/meilisearch` extension owns the search mechanics. A
 single class (`LiveMeilisearchIndex`) touches Meilisearch, behind a pack-owned `SearchBackend`
 port — so a Postgres FTS backend could plug in later without touching anything else.
 
 ## Install & enable
 
-Unlike Lemma's infra-free packs (seo, analytics, collections, importers), lemma-search is
+Unlike Thallo's infra-free packs (seo, analytics, collections, importers), thallo-search is
 **opt-in, not bundled-on by default** — it needs a running Meilisearch, so a lean install ships it
 **off** (no search reindexer is bound, `/v1/search` is not registered). It is still fully
 discoverable: `php glueful extensions:list` shows it under **Available (off)** (`○`), and
-`php glueful extensions:info lemma-search` shows its details.
+`php glueful extensions:info thallo-search` shows its details.
 
 To add it to an existing app (it lives as a path package in this monorepo):
 
-1. `composer require glueful/lemma-search`
+1. `composer require glueful/thallo-search`
 2. Ensure Meilisearch is reachable (configure the `glueful/meilisearch` extension).
-3. `php glueful extensions:enable lemma-search` — writes the provider into the
+3. `php glueful extensions:enable thallo-search` — writes the provider into the
    `config/extensions.php` allow-list and recompiles the extension cache (or add the FQCN
-   `Glueful\Lemma\Search\LemmaSearchServiceProvider` to that list by hand).
+   `Thallo\Search\SearchServiceProvider` to that list by hand).
 4. `php glueful search:reindex` — backfill the index from published content.
 
-The pack registers **no migrations** (Meilisearch owns storage). Once enabled, the `lemma.search`
-capability is on; disable it without removing the extension by setting `'lemma.search' => false` in
-`config/lemma.php`'s `capabilities` switchboard (routes then `404` and the reindexer resolves to a
+The pack registers **no migrations** (Meilisearch owns storage). Once enabled, the `thallo.search`
+capability is on; disable it without removing the extension by setting `'thallo.search' => false` in
+`config/thallo.php`'s `capabilities` switchboard (routes then `404` and the reindexer resolves to a
 no-op). When Meilisearch is missing or unhealthy, the endpoint fails closed (503) and live
 reindexing no-ops without ever breaking a publish.
 
@@ -78,11 +78,11 @@ Response — the payload is wrapped in the framework's standard `data` envelope:
 - **Status codes:** empty `q` → 422; missing `locale` → 422; unknown `type` → 404; inaccessible
   `type` → 403; backend unhealthy → 503. `limit` is clamped to `[1, max_limit]`; `offset` ≥ 0.
 
-## Configuration (`config/lemma-search.php`)
+## Configuration (`config/search.php`)
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `index` | `lemma_content` | Meilisearch index name (one shared content index). |
+| `index` | `content` | Meilisearch index name (one shared content index). |
 | `snippet_length` | `40` | Highlighted-body crop length, in words. |
 | `default_limit` | `20` | Page size when `limit` is omitted. |
 | `max_limit` | `50` | Upper bound for `limit`. |
@@ -124,7 +124,7 @@ type's `public_delivery` flag takes effect in search immediately — no reindex 
 
 ## Lifecycle
 
-Publish/unpublish/update/delete events flow through Lemma's existing `ContentReindexer` seam
+Publish/unpublish/update/delete events flow through Thallo's existing `ContentReindexer` seam
 (identity-only). A per-locale event re-reads and upserts (or deletes that locale's doc); a
 whole-entry delete (`locale = null`) purges every locale doc. Reindexing runs in the pipeline's
 after-commit and is wrapped so a search-backend failure is logged, never breaking the publish —
