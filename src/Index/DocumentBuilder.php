@@ -18,7 +18,7 @@ final class DocumentBuilder
 {
     private const INDEXABLE_TYPES = ['string', 'text'];
 
-    /** @param array<string,array<string,mixed>> $typeConfig config('lemma_search.types') */
+    /** @param array<string,array<string,mixed>> $typeConfig config('search.types') */
     public function __construct(private readonly array $typeConfig)
     {
     }

@@ -26,7 +26,7 @@ use Psr\Log\LoggerInterface;
 
 final class SearchServiceProvider extends ServiceProvider
 {
-    private const CAPABILITY = 'lemma.search';
+    private const CAPABILITY = 'thallo.search';
 
     /** @return array<string, array<string, mixed>> */
     public static function services(): array
@@ -66,16 +66,16 @@ final class SearchServiceProvider extends ServiceProvider
             $container->get(SearchBackend::class),
             $container->get(VisibilityResolver::class),
             $container->get(ContentTypeReader::class),
-            (int) config($context, 'lemma_search.default_limit', 20),
-            (int) config($context, 'lemma_search.max_limit', 50),
+            (int) config($context, 'search.default_limit', 20),
+            (int) config($context, 'search.max_limit', 50),
         );
     }
 
     public static function makeSearchBackend(ContainerInterface $container): MeilisearchBackend
     {
         $context = $container->get(ApplicationContext::class);
-        $indexName = (string) config($context, 'lemma_search.index', 'lemma_content');
-        $snippetLength = (int) config($context, 'lemma_search.snippet_length', 40);
+        $indexName = (string) config($context, 'search.index', 'lemma_content');
+        $snippetLength = (int) config($context, 'search.snippet_length', 40);
 
         return new MeilisearchBackend(
             LiveMeilisearchIndex::fromContainer($container, $indexName),
@@ -87,7 +87,7 @@ final class SearchServiceProvider extends ServiceProvider
     {
         $context = $container->get(ApplicationContext::class);
         /** @var array<string,array<string,mixed>> $types */
-        $types = (array) config($context, 'lemma_search.types', []);
+        $types = (array) config($context, 'search.types', []);
         return new DocumentBuilder($types);
     }
 
@@ -114,8 +114,8 @@ final class SearchServiceProvider extends ServiceProvider
 
     public function register(ApplicationContext $context): void
     {
-        // Package configs are NOT auto-loaded — merge the pack's own tree under 'lemma_search'.
-        $this->mergeConfig('lemma_search', require __DIR__ . '/../config/lemma-search.php');
+        // Package configs are NOT auto-loaded — merge the pack's own tree under 'search'.
+        $this->mergeConfig('search', require __DIR__ . '/../config/search.php');
     }
 
     public function boot(ApplicationContext $context): void
