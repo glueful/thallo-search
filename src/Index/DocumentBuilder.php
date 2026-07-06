@@ -10,7 +10,7 @@ use Thallo\Contracts\Search\IndexableContent;
 /**
  * Builds the shared-index search document for one published entry+locale.
  *
- * The `lemma_content` index has two searchable attributes, `title` (ranked first) and
+ * The `content` index has two searchable attributes, `title` (ranked first) and
  * `body`. Per-type `weights` cannot re-order index-global searchable attributes, so they
  * instead order the fields concatenated into `body` (highest weight first).
  */

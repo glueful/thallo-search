@@ -74,7 +74,7 @@ final class SearchServiceProvider extends ServiceProvider
     public static function makeSearchBackend(ContainerInterface $container): MeilisearchBackend
     {
         $context = $container->get(ApplicationContext::class);
-        $indexName = (string) config($context, 'search.index', 'lemma_content');
+        $indexName = (string) config($context, 'search.index', 'content');
         $snippetLength = (int) config($context, 'search.snippet_length', 40);
 
         return new MeilisearchBackend(
