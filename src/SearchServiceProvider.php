@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thallo\Search;
 
+use Glueful\Extensions\DeclaresLoadOrder;
 use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Extensions\ServiceProvider;
 use Thallo\Contracts\Capability\Capability;
@@ -24,8 +25,24 @@ use Thallo\Search\Query\VisibilityResolver;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
-final class SearchServiceProvider extends ServiceProvider
+final class SearchServiceProvider extends ServiceProvider implements DeclaresLoadOrder
 {
+    public static function loadAfter(): array
+    {
+        return [];
+    }
+
+    /**
+     * Post-extension tier (modules-not-extensions spec §5.2): app-integrated modules load
+     * AFTER the extension universe, reproducing the pre-conversion order in which they lived
+     * at the tail of config/extensions.php. Inter-module order comes from the
+     * serviceproviders.php list (the orderer's stable tie-break).
+     */
+    public static function loadPriority(): int
+    {
+        return 100;
+    }
+
     private const CAPABILITY = 'thallo.search';
 
     /** @return array<string, array<string, mixed>> */

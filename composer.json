@@ -1,7 +1,7 @@
 {
   "name": "glueful/thallo-search",
   "description": "Search for Thallo: a public, delivery-parity content search API backed by Meilisearch, as a removable capability pack.",
-  "type": "glueful-extension",
+  "type": "library",
   "license": "MIT",
   "authors": [
     { "name": "Michael Tawiah Sowah", "email": "michael@glueful.dev" }
