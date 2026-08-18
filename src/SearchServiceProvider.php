@@ -141,6 +141,7 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             self::CAPABILITY,
             label: 'Search',
             description: 'Public, delivery-parity content search backed by Meilisearch.',
+            owningPackage: 'glueful/meilisearch',
         ));
 
         if (self::enabled($context)) {
