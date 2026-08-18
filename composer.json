@@ -1,25 +1,35 @@
 {
-  "name": "glueful/thallo-search",
-  "description": "Search for Thallo: a public, delivery-parity content search API backed by Meilisearch, as a removable capability pack.",
-  "type": "library",
-  "license": "MIT",
-  "authors": [
-    { "name": "Michael Tawiah Sowah", "email": "michael@glueful.dev" }
-  ],
-  "version": "0.1.0",
-  "require": {
-    "php": "^8.3",
-    "glueful/thallo-contracts": "*",
-    "glueful/framework": "^1.65.0",
-    "glueful/meilisearch": "*"
-  },
-  "autoload": {
-    "psr-4": { "Thallo\\Search\\": "src/" }
-  },
-  "extra": {
-    "glueful": {
-      "provider": "Thallo\\Search\\SearchServiceProvider"
-    }
-  },
-  "minimum-stability": "stable"
+    "name": "glueful/thallo-search",
+    "description": "Search for Thallo: a public, delivery-parity content search API backed by Meilisearch, as a removable capability pack.",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Michael Tawiah Sowah",
+            "email": "michael@glueful.dev"
+        }
+    ],
+    "version": "0.1.0",
+    "require": {
+        "php": "^8.3",
+        "glueful/thallo-contracts": "*",
+        "glueful/framework": "^1.65.0",
+        "glueful/meilisearch": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "Thallo\\Search\\": "src/"
+        }
+    },
+    "extra": {
+        "glueful": {
+            "provider": "Thallo\\Search\\SearchServiceProvider",
+            "requires": {
+                "glueful": ">=1.79.0",
+                "extensions": []
+            },
+            "migrations": "none"
+        }
+    },
+    "minimum-stability": "stable"
 }
