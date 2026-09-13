@@ -134,3 +134,10 @@ after-commit and is wrapped so a search-backend failure is logged, never breakin
 
 Content search only. **Not** in v1: collections-row search, an admin search UI, a Postgres FTS
 backend, and any search-permission migration.
+
+## Contributing
+
+This repository is a read-only mirror, published from
+[glueful/thallo](https://github.com/glueful/thallo) on every release; its `main` is overwritten
+by the next split, so nothing can land here. Issues and pull requests belong in glueful/thallo,
+where this code lives at `packages/thallo-search/`.
