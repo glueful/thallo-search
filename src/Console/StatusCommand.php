@@ -26,6 +26,9 @@ final class StatusCommand extends BaseCommand
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $healthy = $this->backend->health();
+        // Which engine answers, first: "unreachable" means something different for a database
+        // table than for a server — and an engine that cannot be used says why in its name.
+        $output->writeln('Engine: ' . $this->backend->name());
         $output->writeln($healthy
             ? '<info>Backend: reachable, index present.</info>'
             : '<error>Backend: UNREACHABLE (GET /v1/search will return 503).</error>');

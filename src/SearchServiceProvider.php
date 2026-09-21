@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Thallo\Search;
 
 use Glueful\Extensions\DeclaresLoadOrder;
+use Glueful\Extensions\Meilisearch\Indexing\IndexManager;
 use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Database\Connection;
 use Glueful\Extensions\ServiceProvider;
 use Thallo\Contracts\Capability\Capability;
 use Thallo\Contracts\Capability\CapabilityRegistry;
@@ -15,7 +17,10 @@ use Thallo\Search\Console\ReindexCommand;
 use Thallo\Search\Console\StatusCommand;
 use Thallo\Search\Engine\LiveMeilisearchIndex;
 use Thallo\Search\Engine\MeilisearchBackend;
+use Thallo\Search\Engine\PostgresFtsBackend;
 use Thallo\Search\Engine\SearchBackend;
+use Thallo\Search\Engine\SearchEngineChoice;
+use Thallo\Search\Engine\UnavailableSearchBackend;
 use Thallo\Search\Http\SearchController;
 use Thallo\Search\Index\DocumentBuilder;
 use Thallo\Search\Index\NullContentReindexer;
@@ -88,16 +93,27 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
         );
     }
 
-    public static function makeSearchBackend(ContainerInterface $container): MeilisearchBackend
+    public static function makeSearchBackend(ContainerInterface $container): SearchBackend
     {
         $context = $container->get(ApplicationContext::class);
-        $indexName = (string) config($context, 'search.index', 'content');
         $snippetLength = (int) config($context, 'search.snippet_length', 40);
+        $db = $container->get(Connection::class);
 
-        return new MeilisearchBackend(
-            LiveMeilisearchIndex::fromContainer($container, $indexName),
-            $snippetLength,
+        [$engine, $why] = SearchEngineChoice::resolve(
+            (string) config($context, 'search.engine', 'auto'),
+            $db->getDriverName(),
+            (bool) config($context, 'search.meilisearch_configured', false),
+            $container->has(IndexManager::class),
         );
+
+        return match ($engine) {
+            SearchEngineChoice::POSTGRES => new PostgresFtsBackend($db, $snippetLength),
+            SearchEngineChoice::MEILISEARCH => new MeilisearchBackend(
+                LiveMeilisearchIndex::fromContainer($container, (string) config($context, 'search.index', 'content')),
+                $snippetLength,
+            ),
+            default => new UnavailableSearchBackend((string) $why),
+        };
     }
 
     public static function makeDocumentBuilder(ContainerInterface $container): DocumentBuilder
@@ -140,8 +156,9 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
         app($context, CapabilityRegistry::class)->register(new Capability(
             self::CAPABILITY,
             label: 'Search',
-            description: 'Public, delivery-parity content search backed by Meilisearch.',
-            owningPackage: 'glueful/meilisearch',
+            description: 'Public, delivery-parity content search, over PostgreSQL or Meilisearch.',
+            // App-owned: the default engine is the site's own database. Meilisearch is an engine
+            // a site may choose (SearchEngineChoice), not what the capability depends on.
         ));
 
         if (self::enabled($context)) {

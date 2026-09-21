@@ -30,6 +30,11 @@ final class MeilisearchBackend implements SearchBackend
     ) {
     }
 
+    public function name(): string
+    {
+        return 'Meilisearch';
+    }
+
     public function ensureIndex(): void
     {
         $this->index->ensureIndex([

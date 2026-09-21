@@ -70,10 +70,20 @@ final class DocumentBuilder
         }
         $bodyFields = $this->orderByWeight($bodyFields, (array) ($cfg['weights'] ?? []));
 
+        // A body is indexed as the words a reader sees — a snippet is shown to a visitor, and a
+        // tag name or a link target is not a word of the page.
         $bodyParts = [];
         foreach ($bodyFields as $name) {
             $v = $this->stringValue($content->fields, $name);
-            if ($v !== null && $v !== '') {
+            if ($v === null || $v === '') {
+                continue;
+            }
+            $v = match ($schema->field($name)?->format()) {
+                'rich' => self::htmlToText($v),
+                'plain' => self::markdownToText($v),
+                default => $v,
+            };
+            if ($v !== '' && !self::isPathOrUrl($v)) {
                 $bodyParts[] = $v;
             }
         }
@@ -134,6 +144,40 @@ final class DocumentBuilder
         }
 
         return $warnings;
+    }
+
+    /** Rich text as its words: tags dropped (block ends become spaces), entities decoded. */
+    private static function htmlToText(string $html): string
+    {
+        $text = (string) preg_replace('~<(?:/(?:p|div|h[1-6]|li|tr|blockquote|pre)|br\s*/?)>~i', ' ', $html);
+        $text = html_entity_decode(strip_tags($text), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return trim((string) preg_replace('/\s+/u', ' ', $text));
+    }
+
+    /**
+     * Markdown kept in a plain text field (a docs page) as its words. Deliberately light — this
+     * feeds an index, not a page: fence markers, heading and quote marks, table rules and pipes,
+     * emphasis, task boxes and backticks go; a link or an image leaves its text and loses its
+     * target. Plain prose passes through unchanged.
+     */
+    private static function markdownToText(string $markdown): string
+    {
+        $text = (string) preg_replace('/^ {0,3}(`{3,}|~{3,}).*$/m', '', $markdown);
+        $rule = '[ \t]*:?-{3,}:?[ \t]*'; // a table's `|---|:---:|` line
+        $text = (string) preg_replace('/^ {0,3}\|?' . $rule . '(\|' . $rule . ')*\|?[ \t]*$/m', '', $text);
+        $text = (string) preg_replace('/!?\[([^\]]*)\]\([^)]*\)/', '$1', $text);
+        $text = (string) preg_replace('/^ {0,3}\[[^\]]+\]:\s+\S+.*$/m', '', $text);
+        $text = (string) preg_replace('/^ {0,3}(?:#{1,6}|>+|[-*+]|\d+[.)])[ \t]+/m', '', $text);
+        $text = (string) preg_replace('/^\[[ xX]\][ \t]+/m', '', $text);
+        $text = str_replace(['|', '`', '**', '__', '~~'], [' ', '', '', '', ''], $text);
+        return trim((string) preg_replace('/\s+/u', ' ', $text));
+    }
+
+    /** A whole value that is one URL or one file path — where a page came from, not what it says. */
+    private static function isPathOrUrl(string $value): bool
+    {
+        return preg_match('/\s/u', $value) !== 1
+            && (preg_match('~\A[a-z][a-z0-9+.-]*://~i', $value) === 1 || str_contains($value, '/'));
     }
 
     /** @return list<string> */

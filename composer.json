@@ -1,6 +1,6 @@
 {
   "name": "glueful/thallo-search",
-  "description": "Search for Thallo: a public, delivery-parity content search API backed by Meilisearch, as a removable capability pack.",
+  "description": "Search for Thallo: a public, delivery-parity content search API over Postgres full-text search or Meilisearch, as a removable capability pack.",
   "type": "library",
   "license": "MIT",
   "authors": [
@@ -12,6 +12,7 @@
   "require": {
     "php": "^8.3",
     "glueful/thallo-contracts": "self.version",
+    "glueful/extension-contracts": "*",
     "glueful/framework": "^1.65.0",
     "glueful/meilisearch": "*"
   },
@@ -27,7 +28,15 @@
         "glueful": ">=1.79.0",
         "extensions": []
       },
-      "migrations": "none"
+      "migrations": [
+        {
+          "id": "default",
+          "path": "migrations",
+          "priority": "dependent",
+          "mode": "core",
+          "verifier": "Thallo\\Search\\Schema\\SearchSchemaVerifier"
+        }
+      ]
     }
   },
   "minimum-stability": "stable"

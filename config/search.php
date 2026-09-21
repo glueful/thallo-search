@@ -4,6 +4,13 @@ declare(strict_types=1);
 
 return [
     // The real enable/disable switch is the host `thallo.capabilities` map (thallo.search).
+
+    // Which engine answers: auto | postgres | meilisearch. `auto` is Meilisearch where the site
+    // has configured one (MEILISEARCH_HOST is set) and the site's own PostgreSQL otherwise — so
+    // search needs nothing installed. Changing engines: run `php glueful search:reindex`.
+    'engine' => env('SEARCH_ENGINE', 'auto'),
+    'meilisearch_configured' => env('MEILISEARCH_HOST') !== null && env('MEILISEARCH_HOST') !== '',
+
     // Meilisearch index name (the pack owns ONE shared content index).
     'index' => env('SEARCH_INDEX', 'content'),
 

@@ -8,11 +8,15 @@ use Thallo\Search\Query\SearchRequest;
 use Thallo\Search\Query\SearchResults;
 
 /**
- * Engine-neutral search port. Every unit except the single Meilisearch-confined class
- * depends only on this, so a PostgresFtsBackend can plug in later untouched.
+ * Engine-neutral search port. Everything but the engines themselves depends only on this:
+ * {@see PostgresFtsBackend}, {@see MeilisearchBackend}, and {@see UnavailableSearchBackend} when
+ * neither can answer ({@see SearchEngineChoice}).
  */
 interface SearchBackend
 {
+    /** What an operator is told is answering searches (`search:status`). */
+    public function name(): string;
+
     /** Create the index if absent and apply settings (searchable/filterable). Idempotent. */
     public function ensureIndex(): void;
 

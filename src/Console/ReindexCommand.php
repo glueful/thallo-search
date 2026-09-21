@@ -70,7 +70,7 @@ final class ReindexCommand extends BaseCommand
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         if (!$this->backend->health()) {
-            $this->error('Search backend is unavailable — is Meilisearch running and configured?');
+            $this->error('The search engine cannot be used (' . $this->backend->name() . '). See: search:status');
             return self::FAILURE;
         }
 

@@ -1,35 +1,58 @@
 # thallo-search
 
-Public, delivery-parity **content search** for [Thallo](https://thallo.dev), backed by
-[Meilisearch](https://www.meilisearch.com/) — shipped as a removable capability pack.
+Public, delivery-parity **content search** for [Thallo](https://thallo.dev) — shipped as a
+removable capability pack, with two engines behind one port:
+
+- **PostgreSQL full-text search** — the database your site already has. Nothing to install,
+  nothing to run. Stemming in the page's language, prefix matching for a search-as-you-type
+  box, ranked with titles above bodies, highlighted snippets.
+- **[Meilisearch](https://www.meilisearch.com/)** — for a site that wants typo tolerance and
+  runs the server; the `glueful/meilisearch` extension owns the mechanics.
 
 thallo-search owns Thallo semantics (published-only visibility, `href`/`title`, lifecycle sync,
-the `ContentReindexer` seam); the `glueful/meilisearch` extension owns the search mechanics. A
-single class (`LiveMeilisearchIndex`) touches Meilisearch, behind a pack-owned `SearchBackend`
-port — so a Postgres FTS backend could plug in later without touching anything else.
+the `ContentReindexer` seam). Everything but the engines depends only on the `SearchBackend`
+port.
 
-## Install & enable
+## Turn it on
 
-Unlike Thallo's infra-free packs (seo, analytics, collections, importers), thallo-search is
-**opt-in, not bundled-on by default** — it needs a running Meilisearch, so a lean install ships it
-**off** (no search reindexer is bound, `/v1/search` is not registered). It is still fully
-discoverable: `php glueful extensions:list` shows it under **Available (off)** (`○`), and
-`php glueful extensions:info thallo-search` shows its details.
+Search ships **off**. Turn it on in the admin under **Settings › General › Content search**, or
+set `'thallo.search' => true` in `config/thallo.php`'s `capabilities`. Then index what is already
+published:
 
-To add it to an existing app (it lives as a path package in this monorepo):
+```bash
+php glueful search:reindex
+php glueful search:status     # which engine answers, and whether it can
+```
 
-1. `composer require glueful/thallo-search`
-2. Ensure Meilisearch is reachable (configure the `glueful/meilisearch` extension).
-3. `php glueful extensions:enable thallo-search` — writes the provider into the
-   `config/extensions.php` allow-list and recompiles the extension cache (or add the FQCN
-   `Thallo\Search\SearchServiceProvider` to that list by hand).
-4. `php glueful search:reindex` — backfill the index from published content.
+From then on publishing, updating, unpublishing and deleting keep the index in step. While the
+capability is off, `/v1/search` is not registered (404) and the reindexer is a no-op.
 
-The pack registers **no migrations** (Meilisearch owns storage). Once enabled, the `thallo.search`
-capability is on; disable it without removing the extension by setting `'thallo.search' => false` in
-`config/thallo.php`'s `capabilities` switchboard (routes then `404` and the reindexer resolves to a
-no-op). When Meilisearch is missing or unhealthy, the endpoint fails closed (503) and live
-reindexing no-ops without ever breaking a publish.
+## Which engine
+
+`SEARCH_ENGINE` is `auto` (the default), `postgres` or `meilisearch`.
+
+| `SEARCH_ENGINE` | Engine |
+| --- | --- |
+| `auto` | Meilisearch if `MEILISEARCH_HOST` is set, otherwise PostgreSQL. |
+| `postgres` | PostgreSQL full-text search. Needs the site's database to be PostgreSQL. |
+| `meilisearch` | Meilisearch. Needs the `glueful/meilisearch` extension enabled and a reachable server. |
+
+A choice that cannot be honoured is never quietly swapped for the other engine — indexing a site
+into a second engine behind its operator's back is how a search goes stale unnoticed. Search is
+then **unavailable**: the endpoint answers 503, publishing is never affected, and
+`search:status` says why. After changing engines, run `search:reindex`.
+
+The PostgreSQL engine keeps its index in the `search_documents` table (the pack's one migration;
+`php glueful thallo:provision` creates it). Postgres maintains the search vector itself, as a
+generated column: each text in the page's language, where words meet by their stem, and as
+written, where a typed prefix can match. A locale maps to a text-search configuration by its
+language (`fr-CA` → `french`); a language Postgres has none for uses `simple`, which matches
+whole words and prefixes without stemming. With workspaces on, the table is workspace-owned like
+every other content table.
+
+**A query is words and nothing else.** What a visitor types is cut into words; each must match,
+by its stem or as a prefix, so more words narrow a search. No operator a visitor types reaches
+the query parser. A single letter is a word, not the start of every word beginning with it.
 
 ## Endpoint
 
@@ -39,7 +62,7 @@ GET /v1/search?q=<terms>&locale=<code>[&type=<slug>][&limit=<n>][&offset=<n>]
 
 Behind `optional_api_key`: an authenticated key narrows visibility to its scopes; an anonymous
 request sees only content types with `public_delivery = true`. Visibility is enforced **inside**
-the Meilisearch filter, so `total` and pagination stay correct.
+the engine's query, so `total` and pagination stay correct.
 
 Response — the payload is wrapped in the framework's standard `data` envelope:
 
@@ -82,6 +105,7 @@ Response — the payload is wrapped in the framework's standard `data` envelope:
 
 | Key | Default | Meaning |
 | --- | --- | --- |
+| `engine` | `auto` | `SEARCH_ENGINE`: `auto`, `postgres` or `meilisearch` (above). |
 | `index` | `content` | Meilisearch index name (one shared content index). |
 | `snippet_length` | `40` | Highlighted-body crop length, in words. |
 | `default_limit` | `20` | Page size when `limit` is omitted. |
@@ -89,7 +113,10 @@ Response — the payload is wrapped in the framework's standard `data` envelope:
 | `types.<slug>` | — | Optional per-type field selection (see below). |
 
 By default every **string/text** schema field is indexed; the title is the `title` field, else
-the entry label, else the first indexed string field. Override per content type:
+the entry label, else the first indexed string field. A body is indexed as the words a reader
+sees: rich text loses its tags, Markdown in a plain text field (a docs page) loses its syntax,
+and a field whose whole value is a URL or a file path is not prose and is left out. Override per
+content type:
 
 ```php
 'types' => [
@@ -130,10 +157,10 @@ whole-entry delete (`locale = null`) purges every locale doc. Reindexing runs in
 after-commit and is wrapped so a search-backend failure is logged, never breaking the publish —
 `search:reindex` recovers.
 
-## v1 scope
+## Scope
 
-Content search only. **Not** in v1: collections-row search, an admin search UI, a Postgres FTS
-backend, and any search-permission migration.
+Content search only. **Not** here: collections-row search, an admin search UI, typo tolerance
+on the PostgreSQL engine, and any search-permission migration.
 
 ## Contributing
 
