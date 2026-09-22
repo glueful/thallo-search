@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Thallo\Search\Index;
 
 use Thallo\Contracts\Schema\ContentSchemaReader;
+use Thallo\Contracts\Search\BlockTextExtractor;
 use Thallo\Contracts\Search\IndexableContent;
 
 /**
@@ -12,15 +13,19 @@ use Thallo\Contracts\Search\IndexableContent;
  *
  * The `content` index has two searchable attributes, `title` (ranked first) and
  * `body`. Per-type `weights` cannot re-order index-global searchable attributes, so they
- * instead order the fields concatenated into `body` (highest weight first).
+ * instead order the fields concatenated into `body` (highest weight first). A `blocks` field
+ * (a Design-view page) contributes the words its blocks show, through the engine's
+ * {@see BlockTextExtractor} when one is bound.
  */
 final class DocumentBuilder
 {
     private const INDEXABLE_TYPES = ['string', 'text'];
 
     /** @param array<string,array<string,mixed>> $typeConfig config('search.types') */
-    public function __construct(private readonly array $typeConfig)
-    {
+    public function __construct(
+        private readonly array $typeConfig,
+        private readonly ?BlockTextExtractor $blockText = null,
+    ) {
     }
 
     /**
@@ -74,6 +79,13 @@ final class DocumentBuilder
         // tag name or a link target is not a word of the page.
         $bodyParts = [];
         foreach ($bodyFields as $name) {
+            if ($schema->field($name)?->type() === 'blocks') {
+                $words = implode(' ', $this->blockText?->textOf($content->fields[$name] ?? null) ?? []);
+                if ($words !== '') {
+                    $bodyParts[] = $words;
+                }
+                continue;
+            }
             $v = $this->stringValue($content->fields, $name);
             if ($v === null || $v === '') {
                 continue;
@@ -137,9 +149,9 @@ final class DocumentBuilder
                 $warnings[] = "[{$typeSlug}] configured field '{$name}' does not exist in the schema (skipped).";
                 continue;
             }
-            if (!in_array($field->type(), self::INDEXABLE_TYPES, true)) {
+            if (!in_array($field->type(), $this->indexableTypes(), true)) {
                 $warnings[] = "[{$typeSlug}] configured field '{$name}' is type '{$field->type()}', "
-                    . 'not string/text (skipped).';
+                    . 'not ' . implode('/', $this->indexableTypes()) . ' (skipped).';
             }
         }
 
@@ -180,12 +192,18 @@ final class DocumentBuilder
             && (preg_match('~\A[a-z][a-z0-9+.-]*://~i', $value) === 1 || str_contains($value, '/'));
     }
 
+    /** @return list<string> the field types whose words reach the index */
+    private function indexableTypes(): array
+    {
+        return $this->blockText !== null ? [...self::INDEXABLE_TYPES, 'blocks'] : self::INDEXABLE_TYPES;
+    }
+
     /** @return list<string> */
     private function stringFieldNames(ContentSchemaReader $schema): array
     {
         $names = [];
         foreach ($schema->fields() as $field) {
-            if (in_array($field->type(), self::INDEXABLE_TYPES, true)) {
+            if (in_array($field->type(), $this->indexableTypes(), true)) {
                 $names[] = $field->name();
             }
         }

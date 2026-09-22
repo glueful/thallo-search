@@ -12,6 +12,7 @@ use Glueful\Extensions\ServiceProvider;
 use Thallo\Contracts\Capability\Capability;
 use Thallo\Contracts\Capability\CapabilityRegistry;
 use Thallo\Contracts\Schema\ContentTypeReader;
+use Thallo\Contracts\Search\BlockTextExtractor;
 use Thallo\Contracts\Search\ContentReindexer;
 use Thallo\Search\Console\ReindexCommand;
 use Thallo\Search\Console\StatusCommand;
@@ -121,7 +122,9 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
         $context = $container->get(ApplicationContext::class);
         /** @var array<string,array<string,mixed>> $types */
         $types = (array) config($context, 'search.types', []);
-        return new DocumentBuilder($types);
+        $blockText = $container->has(BlockTextExtractor::class) ? $container->get(BlockTextExtractor::class) : null;
+
+        return new DocumentBuilder($types, $blockText instanceof BlockTextExtractor ? $blockText : null);
     }
 
     public static function makeContentReindexer(ContainerInterface $container): ContentReindexer
