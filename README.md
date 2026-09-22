@@ -1,7 +1,7 @@
 # thallo-search
 
 Public, delivery-parity **content search** for [Thallo](https://thallo.dev) — shipped as a
-removable capability pack, with two engines behind one port:
+capability pack, with two engines behind one port:
 
 - **PostgreSQL full-text search** — the database your site already has. Nothing to install,
   nothing to run. Stemming in the page's language, prefix matching for a search-as-you-type
@@ -15,9 +15,10 @@ port.
 
 ## Turn it on
 
-Search ships **off**. Turn it on in the admin under **Settings › General › Content search**, or
-set `'thallo.search' => true` in `config/thallo.php`'s `capabilities`. Then index what is already
-published:
+Search ships **off** (core's `thallo.capabilities` config map sets `'thallo.search' => false`).
+Turn it on in the admin under **Settings › General › Content search** or **Extensions ›
+Capabilities**; both write the same system-wide switch, which overrides the config default. Then
+index what is already published:
 
 ```bash
 php glueful search:reindex
@@ -64,11 +65,13 @@ Behind `optional_api_key`: an authenticated key narrows visibility to its scopes
 request sees only content types with `public_delivery = true`. Visibility is enforced **inside**
 the engine's query, so `total` and pagination stay correct.
 
-Response — the payload is wrapped in the framework's standard `data` envelope:
+Response — the payload is wrapped in the framework's standard `success`/`message`/`data`
+envelope:
 
 ```json
 {
   "success": true,
+  "message": "Success",
   "data": {
     "hits": [
       {
@@ -106,14 +109,16 @@ Response — the payload is wrapped in the framework's standard `data` envelope:
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `engine` | `auto` | `SEARCH_ENGINE`: `auto`, `postgres` or `meilisearch` (above). |
-| `index` | `content` | Meilisearch index name (one shared content index). |
-| `snippet_length` | `40` | Highlighted-body crop length, in words. |
+| `meilisearch_configured` | from env | True when `MEILISEARCH_HOST` is set and non-empty; drives `auto`. |
+| `index` | `content` | `SEARCH_INDEX`: Meilisearch index name (one shared content index). |
+| `snippet_length` | `40` | `SEARCH_SNIPPET_LENGTH`: highlighted-body crop length, in words. |
 | `default_limit` | `20` | Page size when `limit` is omitted. |
 | `max_limit` | `50` | Upper bound for `limit`. |
 | `types.<slug>` | — | Optional per-type field selection (see below). |
 
 By default every **string/text** schema field is indexed; the title is the `title` field, else
-the entry label, else the first indexed string field. A body is indexed as the words a reader
+the entry's slug, else the first indexed string field (this fallback applies only when no
+`title_field` is configured). A body is indexed as the words a reader
 sees: rich text loses its tags, Markdown in a plain text field (a docs page) loses its syntax,
 and a field whose whole value is a URL or a file path is not prose and is left out. Override per
 content type:

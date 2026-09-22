@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 return [
-    // The real enable/disable switch is the host `thallo.capabilities` map (thallo.search).
+    // The enable/disable switch is Extensions › Capabilities (or Settings › General); the host
+    // `thallo.capabilities` map (thallo.search) is only the default until it is flipped there.
 
     // Which engine answers: auto | postgres | meilisearch. `auto` is Meilisearch where the site
     // has configured one (MEILISEARCH_HOST is set) and the site's own PostgreSQL otherwise — so
