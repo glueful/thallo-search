@@ -16,8 +16,7 @@ port.
 ## Turn it on
 
 Search ships **off** (core's `thallo.capabilities` config map sets `'thallo.search' => false`).
-Turn it on in the admin under **Settings › General › Content search** or **Extensions ›
-Capabilities**; both write the same system-wide switch, which overrides the config default. Then
+Turn it on in the admin under **Settings › General › Content search** or **Features**; both write the same system-wide switch, which overrides the config default. Then
 index what is already published:
 
 ```bash
