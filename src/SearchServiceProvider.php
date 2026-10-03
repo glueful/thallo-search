@@ -10,6 +10,7 @@ use Glueful\Bootstrap\ApplicationContext;
 use Glueful\Database\Connection;
 use Glueful\Extensions\ServiceProvider;
 use Thallo\Contracts\Capability\Capability;
+use Thallo\Contracts\Capability\DeclaresCapabilities;
 use Thallo\Contracts\Capability\CapabilityRegistry;
 use Thallo\Contracts\Schema\ContentTypeReader;
 use Thallo\Contracts\Search\BlockTextExtractor;
@@ -31,7 +32,7 @@ use Thallo\Search\Query\VisibilityResolver;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 
-final class SearchServiceProvider extends ServiceProvider implements DeclaresLoadOrder
+final class SearchServiceProvider extends ServiceProvider implements DeclaresLoadOrder, DeclaresCapabilities
 {
     public static function loadAfter(): array
     {
@@ -154,15 +155,21 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
         $this->mergeConfig('search', require __DIR__ . '/../config/search.php');
     }
 
+    public function capabilities(): array
+    {
+        return [
+            new Capability(
+                self::CAPABILITY,
+                label: 'Search',
+                description: 'Public, delivery-parity content search, over PostgreSQL or Meilisearch.',
+                // App-owned: the default engine is the site's own database. Meilisearch is an engine
+                // a site may choose (SearchEngineChoice), not what the capability depends on.
+            ),
+        ];
+    }
+
     public function boot(ApplicationContext $context): void
     {
-        app($context, CapabilityRegistry::class)->register(new Capability(
-            self::CAPABILITY,
-            label: 'Search',
-            description: 'Public, delivery-parity content search, over PostgreSQL or Meilisearch.',
-            // App-owned: the default engine is the site's own database. Meilisearch is an engine
-            // a site may choose (SearchEngineChoice), not what the capability depends on.
-        ));
 
         if (self::enabled($context)) {
             $this->loadRoutesFrom(__DIR__ . '/../routes/public-routes.php');
