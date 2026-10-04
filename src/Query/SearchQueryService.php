@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thallo\Search\Query;
 
+use Glueful\Cache\CacheStore;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Thallo\Contracts\Search\KindFilter;
@@ -28,6 +29,8 @@ use Thallo\Search\Store\Target;
 final class SearchQueryService
 {
     private const EXTRA_BATCHES = 3;
+    private const READINESS_KEY = 'search:readiness';
+    private const READINESS_SECONDS = 10;
 
     public function __construct(
         private readonly SearchSourceRegistry $sources,
@@ -37,6 +40,8 @@ final class SearchQueryService
         private readonly CursorSigner $cursors,
         private readonly Workspace $workspace,
         private readonly LoggerInterface $logger = new NullLogger(),
+        /** Remembers the engine's readiness briefly while nothing is built; null asks every time. */
+        private readonly ?CacheStore $cache = null,
     ) {
     }
 
@@ -96,7 +101,7 @@ final class SearchQueryService
         if ($filters === []) {
             // Nothing built yet: an engine that cannot answer is the reason, not the build.
             return SearchOutcome::of(
-                $this->store->readiness()->available ? SearchOutcome::REBUILDING : SearchOutcome::UNAVAILABLE,
+                $this->engineReady() ? SearchOutcome::REBUILDING : SearchOutcome::UNAVAILABLE,
             );
         }
 
@@ -110,6 +115,18 @@ final class SearchQueryService
         }
 
         return $this->collect($input, $audience, $limit, $refill, $filters, $start, $binding);
+    }
+
+    /** Whether the engine can answer, asked at most every few seconds across requests. */
+    private function engineReady(): bool
+    {
+        $cached = $this->cache?->get(self::READINESS_KEY);
+        if ($cached === '1' || $cached === '0') {
+            return $cached === '1';
+        }
+        $ready = $this->store->readiness()->available;
+        $this->cache?->set(self::READINESS_KEY, $ready ? '1' : '0', self::READINESS_SECONDS);
+        return $ready;
     }
 
     /** @param array<string, KindFilter> $filters */
