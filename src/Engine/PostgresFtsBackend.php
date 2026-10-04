@@ -192,7 +192,7 @@ final class PostgresFtsBackend implements SearchBackend
      *
      * @return list<string>
      */
-    private static function words(string $q): array
+    public static function words(string $q): array
     {
         $words = preg_split('/[^\p{L}\p{N}]+/u', mb_strtolower($q), -1, PREG_SPLIT_NO_EMPTY) ?: [];
         return array_slice(array_values(array_unique($words)), 0, self::MAX_WORDS);
