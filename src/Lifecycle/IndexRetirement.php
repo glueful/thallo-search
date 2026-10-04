@@ -73,6 +73,22 @@ final class IndexRetirement
         }
     }
 
+    /**
+     * Delete the single shared index an older install kept on Meilisearch (spec §3.5.6, amended):
+     * nothing reads it now. True when it is gone (or never existed), false on Postgres.
+     */
+    public function dropOldSharedIndex(): bool
+    {
+        if ($this->locator->engine() !== SearchIndexLocator::MEILISEARCH) {
+            return false;
+        }
+        $name = $this->locator->indexName();
+        if (in_array($name, $this->store->listTargets($name), true)) {
+            $this->store->dropTarget(new Target(SearchIndexLocator::MEILISEARCH, $name, 0));
+        }
+        return true;
+    }
+
     public function collectAll(): void
     {
         foreach (array_keys($this->sources->all()) as $kind) {

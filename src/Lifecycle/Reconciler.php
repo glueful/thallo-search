@@ -21,6 +21,9 @@ final class Reconciler
     /** Installation-wide: the kinds last seen available, for changes made only in configuration. */
     public const AVAILABILITY_MARKER = 'search.availability_marker';
 
+    /** Installation-wide: set once the old shared Meilisearch index has been deleted. */
+    public const OLD_INDEX_FLAG = 'search.old_index';
+
     public function __construct(
         private readonly KindAvailability $availability,
         private readonly DemandResolver $demand,
@@ -101,6 +104,22 @@ final class Reconciler
                 $this->logger->warning('Search reconcile failed for a workspace: ' . $message);
             }
         });
+        $this->dropOldSharedIndexOnce();
+    }
+
+    /** The old shared Meilisearch index goes once; a failed delete is retried on the next run. */
+    private function dropOldSharedIndexOnce(): void
+    {
+        if ($this->flags->get(self::OLD_INDEX_FLAG) !== null) {
+            return;
+        }
+        try {
+            if ($this->retirement->dropOldSharedIndex()) {
+                $this->flags->put(self::OLD_INDEX_FLAG, 'deleted');
+            }
+        } catch (\Throwable $e) {
+            $this->logger->warning('Search old index not deleted: ' . ErrorText::sanitize($e->getMessage()));
+        }
     }
 
     /**

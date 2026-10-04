@@ -30,6 +30,12 @@ final class SearchIndexLocator
         return $this->engine;
     }
 
+    /** The configured index name: the prefix of every per-kind index, and the old shared index's name. */
+    public function indexName(): string
+    {
+        return $this->index;
+    }
+
     /** @return array{active: ?Target, building: ?Target} */
     public function targets(string $kind): array
     {
