@@ -142,6 +142,12 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             \Thallo\Search\Lifecycle\Cutover::class => [
                 'shared' => true, 'factory' => [self::class, 'makeCutover'],
             ],
+            \Thallo\Search\Http\SearchPageThrottle::class => [
+                'shared' => true, 'factory' => [self::class, 'makePageThrottle'],
+            ],
+            \Thallo\Search\Http\SearchPageController::class => [
+                'shared' => true, 'factory' => [self::class, 'makePageController'],
+            ],
             \Thallo\Search\Assets\SearchAssetMap::class => [
                 'shared' => true, 'factory' => [self::class, 'makeAssetMap'],
             ],
@@ -290,6 +296,29 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             $container->get(\Thallo\Search\Lifecycle\Drainer::class),
             $container->get(Connection::class),
             $container->get(LoggerInterface::class),
+        );
+    }
+
+    public static function makePageThrottle(ContainerInterface $container): \Thallo\Search\Http\SearchPageThrottle
+    {
+        return new \Thallo\Search\Http\SearchPageThrottle(
+            $container->get(\Glueful\Cache\CacheStore::class),
+            (int) config($container->get(ApplicationContext::class), 'search.page_rate_limit', 60),
+        );
+    }
+
+    public static function makePageController(ContainerInterface $container): \Thallo\Search\Http\SearchPageController
+    {
+        $context = $container->get(ApplicationContext::class);
+        return new \Thallo\Search\Http\SearchPageController(
+            $context,
+            $container->get(\Thallo\Render\TwigFactory::class),
+            $container->get(\Thallo\Render\RenderContextExtension::class),
+            $container->get(CapabilityRegistry::class),
+            $container->get(SearchSourceRegistry::class),
+            $container->get(\Thallo\Contracts\Context\Context::class),
+            $container->get(\Thallo\Search\Http\SearchPageThrottle::class),
+            (int) config($context, 'search.page_size', 10),
         );
     }
 
@@ -476,6 +505,7 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
         // The Search block type, whether or not search is on (search block spec §3.1): its own
         // `requiresCapability` hides it from the editor while search is off.
         $this->registerBlockType($context);
+        $this->loadRoutesFrom(__DIR__ . '/../routes/page-routes.php');
 
         // Every kind's metadata is discoverable whether or not search is on (search block spec §3.2):
         // availability is decided from capabilities, never from whether a contributor registered.

@@ -33,6 +33,10 @@ return [
     // Snippet crop length, in words, for highlighted body excerpts.
     'snippet_length' => (int) env('SEARCH_SNIPPET_LENGTH', 40),
 
+    // The /search page: results per page, and searches allowed per client per minute.
+    'page_size' => (int) env('SEARCH_PAGE_SIZE', 10),
+    'page_rate_limit' => (int) env('SEARCH_PAGE_RATE_LIMIT', 60),
+
     // Query pagination bounds.
     'default_limit' => 20,
     'max_limit' => 50,
