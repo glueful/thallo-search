@@ -17,7 +17,32 @@ final class DemandResolver
     public function __construct(
         private readonly SearchSourceRegistry $sources,
         private readonly SystemChannel $flags,
+        private readonly ?StateRepository $state = null,
     ) {
+    }
+
+    /**
+     * Why a kind needs rebuilding in the current workspace, or null: no state row yet (a new
+     * workspace), a capability switched since the last successful build, a changed document shape,
+     * or recorded demand not yet satisfied.
+     */
+    public function pending(string $kind): ?string
+    {
+        $row = $this->state?->row($kind);
+        if ($row === null) {
+            return 'new_workspace';
+        }
+        if ($this->relevantVersion($kind) > (int) $row['reconciled_version']) {
+            return 'capability';
+        }
+        $contributor = $this->sources->all()[$kind] ?? null;
+        if ($contributor !== null && $contributor->schemaVersion() !== (int) $row['schema_version']) {
+            return 'schema';
+        }
+        if ($this->state->maxDemandSeq($kind) > (int) $row['satisfied_seq']) {
+            return 'demand';
+        }
+        return null;
     }
 
     public function relevantVersion(string $kind): int

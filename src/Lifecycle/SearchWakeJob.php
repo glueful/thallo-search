@@ -1,0 +1,30 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Thallo\Search\Lifecycle;
+
+use Glueful\Bootstrap\ApplicationContext;
+use Glueful\Queue\Job;
+
+/**
+ * The wake-up queued after a rebuild request commits. It carries the workspace it was requested in
+ * and reconciles inside it; the demand itself is in the database, so this job is only ever an
+ * early start for what the schedule would do anyway.
+ */
+final class SearchWakeJob extends Job
+{
+    public function handle(): void
+    {
+        $context = $this->context;
+        if (!$context instanceof ApplicationContext) {
+            throw new \RuntimeException('SearchWakeJob requires an ApplicationContext.');
+        }
+        $workspace = $this->getData()['workspace'] ?? null;
+        $container = $context->getContainer();
+        $container->get(Workspace::class)->run(
+            is_string($workspace) ? $workspace : null,
+            static fn () => $container->get(Reconciler::class)->runWorkspace(false),
+        );
+    }
+}

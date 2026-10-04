@@ -462,6 +462,16 @@ final class StateRepository
         });
     }
 
+    /** A wake-up could not be queued: say so, without touching the status a build owns. */
+    public function noteQueueFailure(string $kind, string $error): void
+    {
+        $this->ensure($kind);
+        $this->update(
+            $kind,
+            ['last_error' => 'queue: ' . ErrorText::sanitize($error), 'updated_at' => $this->clock->now()],
+        );
+    }
+
     /** Record why an entry failed; it stays unresolved and is retried. */
     public function markEntryFailed(string $kind, int $seq, string $error): void
     {

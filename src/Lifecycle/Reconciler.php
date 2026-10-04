@@ -1,0 +1,117 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Thallo\Search\Lifecycle;
+
+use Psr\Log\LoggerInterface;
+use Thallo\Contracts\Settings\SystemChannel;
+use Thallo\Search\Query\KindAvailability;
+
+/**
+ * Picks up outstanding rebuild demand (search block spec §3.5.7). The queued wake-up, the scheduled
+ * `search:reconcile` and a throttled boot recovery all come here; the demand itself lives in the
+ * database, so a lost wake-up loses nothing. A full reconcile rebuilds every available kind even
+ * when it reports ready — what catches a change lost between a commit and its after-commit event.
+ * Versions and satisfied demand are written by a promoted build alone; nothing here acknowledges
+ * demand a build did not satisfy.
+ */
+final class Reconciler
+{
+    /** Installation-wide: the kinds last seen available, for changes made only in configuration. */
+    public const AVAILABILITY_MARKER = 'search.availability_marker';
+
+    public function __construct(
+        private readonly KindAvailability $availability,
+        private readonly DemandResolver $demand,
+        private readonly StateRepository $state,
+        private readonly Rebuilder $rebuilder,
+        private readonly IndexRetirement $retirement,
+        private readonly Drainer $drainer,
+        private readonly Workspace $workspace,
+        private readonly SystemChannel $flags,
+        private readonly LoggerInterface $logger,
+        /** A hook run after each workspace's kinds (the cutover check plugs in here). */
+        private readonly ?\Closure $afterWorkspace = null,
+    ) {
+    }
+
+    /** @return array<string, RebuildOutcome|null> kind => what happened (null: nothing was due) */
+    public function runWorkspace(bool $full): array
+    {
+        $outcomes = [];
+        foreach (array_keys($this->availability->available()) as $kind) {
+            $outcomes[$kind] = $this->runKind($kind, $full);
+        }
+        if ($this->afterWorkspace !== null) {
+            ($this->afterWorkspace)();
+        }
+        return $outcomes;
+    }
+
+    public function runKind(string $kind, bool $full = false): ?RebuildOutcome
+    {
+        $reason = $full ? 'full' : $this->demand->pending($kind);
+        $this->state->ensure($kind);
+        $outcome = null;
+        if ($reason !== null) {
+            $outcome = $this->rebuilder->run($kind);
+            if ($outcome !== RebuildOutcome::PROMOTED && $outcome !== RebuildOutcome::BUSY) {
+                $this->logger->warning("Search rebuild of '{$kind}' ({$reason}) did not complete: {$outcome->value}");
+            }
+        }
+        $this->retirement->collect($kind);
+        $this->drainer->drain($kind);
+        return $outcome;
+    }
+
+    /** Every workspace, each inside its own context. */
+    public function runAll(bool $full): void
+    {
+        $this->workspace->each(function () use ($full): void {
+            try {
+                $this->runWorkspace($full);
+            } catch (\Throwable $e) {
+                $message = ErrorText::sanitize($e->getMessage());
+                $this->logger->warning('Search reconcile failed for a workspace: ' . $message);
+            }
+        });
+    }
+
+    /**
+     * Boot recovery: a change in which kinds are available — including one made only in
+     * configuration, with no switch written — becomes capability demand in every workspace; then
+     * any workspace with outstanding demand is reconciled.
+     */
+    public function recoverIfDue(): void
+    {
+        if (method_exists($this->flags, 'clearCache')) {
+            $this->flags->clearCache();
+        }
+        $available = array_keys($this->availability->available());
+        sort($available);
+        $marker = json_encode($available, JSON_THROW_ON_ERROR);
+        $last = $this->flags->get(self::AVAILABILITY_MARKER);
+        if ($last !== $marker) {
+            $previous = is_string($last) ? (array) json_decode($last, true) : [];
+            $newly = array_values(array_diff($available, $previous));
+            if ($last === null) {
+                $newly = []; // first sight: new-workspace demand covers the first build
+            }
+            $this->workspace->each(function () use ($newly): void {
+                foreach ($newly as $kind) {
+                    $this->state->addDemand($kind, 'capability');
+                }
+            });
+            $this->flags->put(self::AVAILABILITY_MARKER, $marker);
+        }
+        $this->workspace->each(function (): void {
+            foreach (array_keys($this->availability->available()) as $kind) {
+                if ($this->demand->pending($kind) !== null) {
+                    $this->runWorkspace(false);
+                    return;
+                }
+            }
+        });
+    }
+}

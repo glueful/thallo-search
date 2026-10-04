@@ -104,10 +104,31 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
                 'shared' => true, 'factory' => [self::class, 'makeSearchController'],
             ],
             ReindexCommand::class => [
-                'class' => ReindexCommand::class, 'shared' => true, 'autowire' => true,
+                'shared' => true, 'factory' => [self::class, 'makeReindexCommand'],
             ],
             StatusCommand::class => [
                 'class' => StatusCommand::class, 'shared' => true, 'autowire' => true,
+            ],
+            \Thallo\Search\Console\ReconcileCommand::class => [
+                'class' => \Thallo\Search\Console\ReconcileCommand::class, 'shared' => true, 'autowire' => true,
+            ],
+            \Thallo\Search\Query\KindAvailability::class => [
+                'shared' => true, 'factory' => [self::class, 'makeKindAvailability'],
+            ],
+            \Thallo\Search\Lifecycle\DemandResolver::class => [
+                'class' => \Thallo\Search\Lifecycle\DemandResolver::class, 'shared' => true, 'autowire' => true,
+            ],
+            \Thallo\Search\Lifecycle\IndexRetirement::class => [
+                'shared' => true, 'factory' => [self::class, 'makeIndexRetirement'],
+            ],
+            \Thallo\Search\Lifecycle\Rebuilder::class => [
+                'shared' => true, 'factory' => [self::class, 'makeRebuilder'],
+            ],
+            \Thallo\Search\Lifecycle\Reconciler::class => [
+                'shared' => true, 'factory' => [self::class, 'makeReconciler'],
+            ],
+            \Thallo\Search\Lifecycle\SearchDemand::class => [
+                'shared' => true, 'factory' => [self::class, 'makeSearchDemand'],
             ],
         ];
     }
@@ -217,6 +238,93 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
         );
     }
 
+    public static function makeKindAvailability(ContainerInterface $container): \Thallo\Search\Query\KindAvailability
+    {
+        $registry = $container->get(CapabilityRegistry::class);
+        return new \Thallo\Search\Query\KindAvailability(
+            $container->get(SearchSourceRegistry::class),
+            static fn (string $id): bool => $registry->isEnabled($id),
+            static function (string $id) use ($registry): string {
+                foreach ($registry->all() as $capability) {
+                    if ($capability->id === $id) {
+                        return (string) ($capability->label ?? $id);
+                    }
+                }
+                return $id;
+            },
+        );
+    }
+
+    public static function makeIndexRetirement(ContainerInterface $container): \Thallo\Search\Lifecycle\IndexRetirement
+    {
+        return new \Thallo\Search\Lifecycle\IndexRetirement(
+            $container->get(\Thallo\Search\Lifecycle\StateRepository::class),
+            $container->get(\Thallo\Search\Store\IndexStore::class),
+            $container->get(\Thallo\Search\Lifecycle\SearchIndexLocator::class),
+            $container->get(SearchSourceRegistry::class),
+            (int) config($container->get(ApplicationContext::class), 'search.retire_grace', 120),
+        );
+    }
+
+    public static function makeRebuilder(ContainerInterface $container): \Thallo\Search\Lifecycle\Rebuilder
+    {
+        $context = $container->get(ApplicationContext::class);
+        return new \Thallo\Search\Lifecycle\Rebuilder(
+            $container->get(\Thallo\Search\Lifecycle\StateRepository::class),
+            $container->get(\Thallo\Search\Store\IndexStore::class),
+            $container->get(SearchSourceRegistry::class),
+            $container->get(\Thallo\Search\Lifecycle\SearchIndexLocator::class),
+            $container->get(\Thallo\Search\Lifecycle\DemandResolver::class),
+            $container->get(\Thallo\Search\Lifecycle\IndexRetirement::class),
+            (int) config($context, 'search.build_lease', 120),
+            (int) config($context, 'search.build_batch', 200),
+            $container->get(LoggerInterface::class),
+        );
+    }
+
+    public static function makeReconciler(ContainerInterface $container): \Thallo\Search\Lifecycle\Reconciler
+    {
+        return new \Thallo\Search\Lifecycle\Reconciler(
+            $container->get(\Thallo\Search\Query\KindAvailability::class),
+            $container->get(\Thallo\Search\Lifecycle\DemandResolver::class),
+            $container->get(\Thallo\Search\Lifecycle\StateRepository::class),
+            $container->get(\Thallo\Search\Lifecycle\Rebuilder::class),
+            $container->get(\Thallo\Search\Lifecycle\IndexRetirement::class),
+            $container->get(\Thallo\Search\Lifecycle\Drainer::class),
+            $container->get(\Thallo\Search\Lifecycle\Workspace::class),
+            $container->get(\Thallo\Contracts\Settings\SystemChannel::class),
+            $container->get(LoggerInterface::class),
+        );
+    }
+
+    public static function makeSearchDemand(ContainerInterface $container): \Thallo\Search\Lifecycle\SearchDemand
+    {
+        $context = $container->get(ApplicationContext::class);
+        return new \Thallo\Search\Lifecycle\SearchDemand(
+            $container->get(\Thallo\Search\Lifecycle\StateRepository::class),
+            $container->get(\Thallo\Search\Query\KindAvailability::class),
+            $container->get(Connection::class),
+            $container->get(\Thallo\Search\Lifecycle\Workspace::class),
+            static function (array $data) use ($context): void {
+                \Glueful\Queue\QueueManager::setContext($context);
+                \Glueful\Queue\QueueManager::createDefault()
+                    ->push(\Thallo\Search\Lifecycle\SearchWakeJob::class, $data, 'search');
+            },
+        );
+    }
+
+    public static function makeReindexCommand(ContainerInterface $container): ReindexCommand
+    {
+        return new ReindexCommand(
+            $container->get(\Thallo\Search\Lifecycle\SearchDemand::class),
+            $container->get(\Thallo\Search\Lifecycle\Reconciler::class),
+            $container->get(\Thallo\Search\Query\KindAvailability::class),
+            $container->get(\Thallo\Search\Lifecycle\StateRepository::class),
+            null,
+            $container->get(\Thallo\Search\Lifecycle\Workspace::class),
+        );
+    }
+
     public static function makeDocumentBuilder(ContainerInterface $container): DocumentBuilder
     {
         $context = $container->get(ApplicationContext::class);
@@ -287,7 +395,32 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             $this->commands([
                 ReindexCommand::class,
                 StatusCommand::class,
+                \Thallo\Search\Console\ReconcileCommand::class,
             ]);
+
+            // Boot recovery (search block spec §3.5.7): at most once a minute per process, pick up
+            // outstanding demand — including a change made only in configuration. Never fails a
+            // request: the scheduled `search:reconcile` repeats it.
+            if ($container->has(\Glueful\Bootstrap\RequestLifecycle::class)) {
+                $container->get(\Glueful\Bootstrap\RequestLifecycle::class)->onBeginRequest(
+                    static function () use ($container): void {
+                        try {
+                            $cache = $container->get(\Glueful\Cache\CacheStore::class);
+                            if ($cache->get('search:recovery:checked') !== null) {
+                                return;
+                            }
+                            $cache->set('search:recovery:checked', '1', 60);
+                            $container->get(\Thallo\Search\Lifecycle\Reconciler::class)->recoverIfDue();
+                        } catch (\Throwable $e) {
+                            if ($container->has(LoggerInterface::class)) {
+                                $container->get(LoggerInterface::class)->warning(
+                                    'Search recovery did not run: ' . $e->getMessage(),
+                                );
+                            }
+                        }
+                    },
+                );
+            }
         }
     }
 }

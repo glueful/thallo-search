@@ -24,6 +24,11 @@ return [
     'request_timeout' => (int) env('SEARCH_REQUEST_TIMEOUT', 10),
     'lease_margin' => (int) env('SEARCH_LEASE_MARGIN', 5),
     'meilisearch_task_timeout' => (int) env('SEARCH_MEILISEARCH_TASK_TIMEOUT', 10),
+    // Documents per rebuild batch, and how long a retired Meilisearch index is kept before it is
+    // deleted — longer than any query may take, so a query that read its name just before a
+    // promotion still finds it.
+    'build_batch' => (int) env('SEARCH_BUILD_BATCH', 200),
+    'retire_grace' => (int) env('SEARCH_RETIRE_GRACE', 120),
 
     // Snippet crop length, in words, for highlighted body excerpts.
     'snippet_length' => (int) env('SEARCH_SNIPPET_LENGTH', 40),
