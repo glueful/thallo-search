@@ -7,10 +7,14 @@ namespace Thallo\Search\Render;
 use Thallo\Render\Contribution\BlockScriptContributor;
 use Thallo\Search\Assets\SearchAssetMap;
 
-/** The Search block's script, at its fingerprinted URL, for `block_script('search')`. */
+/**
+ * The Search block's script, at its fingerprinted URL, for `block_script('search')`. The asset map
+ * is read when the contributions freeze — on the first render — never on a boot that renders nothing.
+ */
 final class SearchBlockScriptContributor implements BlockScriptContributor
 {
-    public function __construct(private readonly SearchAssetMap $assets)
+    /** @param \Closure(): SearchAssetMap $assets */
+    public function __construct(private readonly \Closure $assets)
     {
     }
 
@@ -26,7 +30,7 @@ final class SearchBlockScriptContributor implements BlockScriptContributor
 
     public function blockScripts(): array
     {
-        $file = $this->assets->fingerprintedName('search.js') ?? 'search.js';
+        $file = ($this->assets)()->fingerprintedName('search.js') ?? 'search.js';
         return ['search' => '/_thallo/search/' . rawurlencode($file)];
     }
 }

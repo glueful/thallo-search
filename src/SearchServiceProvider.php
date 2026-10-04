@@ -455,7 +455,9 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             $render->registerTemplatePaths(new \Thallo\Search\Render\SearchTemplatePathContributor());
             $render->registerStylesheets(new \Thallo\Search\Render\SearchStylesheetContributor());
             $render->registerBlockScripts(new \Thallo\Search\Render\SearchBlockScriptContributor(
-                new \Thallo\Search\Assets\SearchAssetMap(dirname(__DIR__) . '/assets'),
+                static fn (): \Thallo\Search\Assets\SearchAssetMap => $container->get(
+                    \Thallo\Search\Assets\SearchAssetMap::class,
+                ),
             ));
         }
     }
