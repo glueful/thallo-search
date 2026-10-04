@@ -44,6 +44,12 @@ final class Workspace
         return $this->enforced = $this->readEnforcement();
     }
 
+    /** Start afresh: each request and each queued job begins with a new read of the flags. */
+    public function forget(): void
+    {
+        $this->enforced = null;
+    }
+
     private function readEnforcement(): bool
     {
         $flags = $this->flags;

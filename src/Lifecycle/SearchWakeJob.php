@@ -24,6 +24,7 @@ final class SearchWakeJob extends Job
         $workspace = $data['workspace'] ?? null;
         $drain = $data['drain'] ?? null;
         $container = $context->getContainer();
+        $container->get(Workspace::class)->forget(); // a long-lived worker reads the flags afresh per job
         $container->get(Workspace::class)->run(
             is_string($workspace) ? $workspace : null,
             // A live change asks for its kind's backlog to be drained; a rebuild request for a reconcile.

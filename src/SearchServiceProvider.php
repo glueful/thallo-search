@@ -526,6 +526,9 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
                 $container->get(\Glueful\Bootstrap\RequestLifecycle::class)->onBeginRequest(
                     static function () use ($container): void {
                         try {
+                            // Each request reads the tenancy flags afresh (a long-lived process
+                            // keeps the shared Workspace between requests).
+                            $container->get(\Thallo\Search\Lifecycle\Workspace::class)->forget();
                             $cache = $container->get(\Glueful\Cache\CacheStore::class);
                             if ($cache->get('search:recovery:checked') !== null) {
                                 return;
