@@ -70,6 +70,9 @@ final class Reconciler
         } catch (\Throwable $e) {
             $this->logger->warning('Search availability check failed: ' . ErrorText::sanitize($e->getMessage()));
         }
+        if ($this->availability->available() === []) {
+            return; // Search is off: nothing to build, so no workspace is walked
+        }
         $this->workspace->each(function () use ($full): void {
             try {
                 $this->runWorkspace($full);
