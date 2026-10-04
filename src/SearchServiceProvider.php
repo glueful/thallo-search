@@ -20,7 +20,9 @@ use Thallo\Search\Console\StatusCommand;
 use Thallo\Search\Engine\LiveMeilisearchIndex;
 use Thallo\Search\Engine\MeilisearchBackend;
 use Thallo\Search\Engine\PostgresFtsBackend;
+use Thallo\Contracts\Search\SearchSourceRegistry;
 use Thallo\Search\Engine\SearchBackend;
+use Thallo\Search\Sources\DefaultSearchSourceRegistry;
 use Thallo\Search\Engine\SearchEngineChoice;
 use Thallo\Search\Engine\UnavailableSearchBackend;
 use Thallo\Search\Http\SearchController;
@@ -56,6 +58,9 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
     public static function services(): array
     {
         return [
+            SearchSourceRegistry::class => [
+                'class' => DefaultSearchSourceRegistry::class, 'shared' => true,
+            ],
             SearchBackend::class => [
                 'shared' => true, 'factory' => [self::class, 'makeSearchBackend'],
             ],
