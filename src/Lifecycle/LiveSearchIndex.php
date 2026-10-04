@@ -26,6 +26,8 @@ final class LiveSearchIndex implements SearchIndex
         /** Queues a SearchWakeJob: `['workspace' => ?string]`; null drains in the request. */
         private readonly ?\Closure $wake = null,
         private readonly ?Workspace $workspace = null,
+        /** One queued drain per workspace and kind; null queues one per change. */
+        private readonly ?WakeGate $gate = null,
     ) {
     }
 
@@ -37,13 +39,22 @@ final class LiveSearchIndex implements SearchIndex
             $this->logger->warning('Search change not journaled: ' . ErrorText::sanitize($e->getMessage()));
             return;
         }
-        $workspace = $this->workspace?->current();
+        try {
+            $workspace = $this->workspace?->current();
+        } catch (\Throwable $e) {
+            $this->logger->warning('Search workspace not resolved: ' . ErrorText::sanitize($e->getMessage()));
+            $workspace = null;
+        }
         $this->db->afterCommit(function () use ($kind, $workspace): void {
             if ($this->wake !== null) {
                 try {
-                    ($this->wake)(['workspace' => $workspace]);
+                    if ($this->gate !== null && !$this->gate->claim($workspace, $kind)) {
+                        return; // a drain is already queued; it takes this change too
+                    }
+                    ($this->wake)(['workspace' => $workspace, 'drain' => $kind]);
                     return;
                 } catch (\Throwable $e) {
+                    $this->gate?->release($workspace, $kind);
                     $this->logger->warning('Search wake-up not queued: ' . ErrorText::sanitize($e->getMessage()));
                 }
             }

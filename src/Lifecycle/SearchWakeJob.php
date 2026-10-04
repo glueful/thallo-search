@@ -20,11 +20,16 @@ final class SearchWakeJob extends Job
         if (!$context instanceof ApplicationContext) {
             throw new \RuntimeException('SearchWakeJob requires an ApplicationContext.');
         }
-        $workspace = $this->getData()['workspace'] ?? null;
+        $data = $this->getData();
+        $workspace = $data['workspace'] ?? null;
+        $drain = $data['drain'] ?? null;
         $container = $context->getContainer();
         $container->get(Workspace::class)->run(
             is_string($workspace) ? $workspace : null,
-            static fn () => $container->get(Reconciler::class)->runWorkspace(false),
+            // A live change asks for its kind's backlog to be drained; a rebuild request for a reconcile.
+            static fn () => is_string($drain)
+                ? $container->get(Reconciler::class)->drainBacklog($drain)
+                : $container->get(Reconciler::class)->runWorkspace(false),
         );
     }
 }

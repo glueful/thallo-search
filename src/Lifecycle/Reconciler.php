@@ -33,6 +33,7 @@ final class Reconciler
         private readonly LoggerInterface $logger,
         /** Queues a wake-up for a workspace (search block spec §3.5.7): `['workspace' => ?string]`. */
         private readonly ?\Closure $wake = null,
+        private readonly ?WakeGate $gate = null,
     ) {
     }
 
@@ -60,6 +61,25 @@ final class Reconciler
         $this->retirement->collect($kind);
         $this->drainer->drain($kind);
         return $outcome;
+    }
+
+    /**
+     * The queued drain of live changes (search block spec §3.5.2): reopen the gate first, so a change
+     * made from now on queues the next drain, then drain batch after batch until the backlog is empty
+     * or stops shrinking (another drainer holds the lease, or entries keep failing).
+     */
+    public function drainBacklog(string $kind, int $maxRounds = 200): void
+    {
+        $this->gate?->release($this->workspace->current(), $kind);
+        $left = count($this->state->unresolvedEntries($kind));
+        for ($round = 0; $round < $maxRounds && $left > 0; $round++) {
+            $this->drainer->drain($kind);
+            $now = count($this->state->unresolvedEntries($kind));
+            if ($now >= $left) {
+                return;
+            }
+            $left = $now;
+        }
     }
 
     /** Every workspace, each inside its own context — after noting any change in availability. */

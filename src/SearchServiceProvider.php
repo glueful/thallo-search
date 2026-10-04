@@ -265,6 +265,7 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             $container->get(LoggerInterface::class),
             self::wake($container->get(ApplicationContext::class)),
             $container->get(\Thallo\Search\Lifecycle\Workspace::class),
+            new \Thallo\Search\Lifecycle\WakeGate($container->get(\Glueful\Cache\CacheStore::class)),
         );
     }
 
@@ -366,6 +367,7 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             $container->get(\Thallo\Contracts\Settings\SystemChannel::class),
             $container->get(LoggerInterface::class),
             self::wake($container->get(ApplicationContext::class)),
+            new \Thallo\Search\Lifecycle\WakeGate($container->get(\Glueful\Cache\CacheStore::class)),
         );
     }
 
