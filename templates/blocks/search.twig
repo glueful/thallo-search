@@ -24,6 +24,5 @@
   {% include 'search/_form.twig' with {key: block.dom_key, scope: scope, placeholder: data.placeholder|default('Search'), q: ''} %}
   {% endif %}
 </div>
-<link rel="stylesheet" href="/_thallo/search/search.css">
-<script src="/_thallo/search/search.js" defer></script>
+{{ block_script('search') }}
 {% endif %}

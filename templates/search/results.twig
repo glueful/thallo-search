@@ -4,7 +4,6 @@
 {% extends 'layout.twig' %}
 {% block title %}{% if search.q %}Search results for “{{ search.q }}”{% else %}Search{% endif %} — {{ site.name }}{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="/_thallo/search/search.css">
 <section class="thallo-search-page" aria-labelledby="thallo-search-heading" data-search-block data-live="1" data-scope="{{ search.scope }}" data-locale="{{ search.locale }}" data-key="page">
   {% if search.state == 'results' %}
   <h1 id="thallo-search-heading">Results for “{{ search.q }}”</h1>
@@ -47,5 +46,5 @@
 
   {% if search.more_url %}<p><a class="thallo-search-page__more" href="{{ search.more_url }}">More results</a></p>{% endif %}
 </section>
-<script src="/_thallo/search/search.js" defer></script>
+{{ block_script('search') }}
 {% endblock %}
