@@ -64,11 +64,11 @@ final class StatusCommand extends BaseCommand
         if ((bool) $input->getOption('all')) {
             $this->workspace->each(function (?string $workspace) use ($output): void {
                 $output->writeln('Workspace: ' . ($workspace ?? 'single store'));
-                $this->table($output);
+                $this->kindTable($output);
             });
             $output->writeln('Legacy index: ' . ($this->flags->get('search.legacy_index') ?? 'present'));
         } else {
-            $this->table($output);
+            $this->kindTable($output);
         }
 
         foreach ($this->configWarnings() as $warning) {
@@ -77,7 +77,7 @@ final class StatusCommand extends BaseCommand
         return $readiness->available ? self::SUCCESS : self::FAILURE;
     }
 
-    private function table(OutputInterface $output): void
+    private function kindTable(OutputInterface $output): void
     {
         $rows = [];
         foreach ($this->sources->all() as $kind => $contributor) {
