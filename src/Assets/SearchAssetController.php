@@ -25,6 +25,14 @@ final class SearchAssetController
             return new RedirectResponse('/_thallo/search/' . rawurlencode($alias), 302);
         }
         $path = $this->assets->resolve($file);
+        $cache = 'public, max-age=31536000, immutable';
+        if ($path === null && preg_match('/\A([a-z][a-z0-9-]*)-[a-f0-9]+\.(js|css)\z/', $file, $m) === 1) {
+            // An earlier deploy's fingerprint, named by a page cached before it: today's file, briefly
+            // cached, so the block keeps its script until the page itself is re-rendered.
+            $current = $this->assets->fingerprintedName($m[1] . '.' . $m[2]);
+            $path = $current !== null ? $this->assets->resolve($current) : null;
+            $cache = 'public, max-age=300';
+        }
         if ($path === null || !is_file($path)) {
             return new Response('Not Found', 404, ['Content-Type' => 'text/plain; charset=UTF-8']);
         }
@@ -33,7 +41,7 @@ final class SearchAssetController
                 $file,
                 '.css',
             ) ? 'text/css; charset=UTF-8' : 'application/javascript; charset=UTF-8',
-            'Cache-Control' => 'public, max-age=31536000, immutable',
+            'Cache-Control' => $cache,
         ]);
     }
 }
