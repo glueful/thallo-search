@@ -115,7 +115,7 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
                 'shared' => true, 'factory' => [self::class, 'makeKindAvailability'],
             ],
             \Thallo\Search\Lifecycle\DemandResolver::class => [
-                'class' => \Thallo\Search\Lifecycle\DemandResolver::class, 'shared' => true, 'autowire' => true,
+                'shared' => true, 'factory' => [self::class, 'makeDemandResolver'],
             ],
             \Thallo\Search\Lifecycle\IndexRetirement::class => [
                 'shared' => true, 'factory' => [self::class, 'makeIndexRetirement'],
@@ -221,6 +221,16 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             ),
             default => new \Thallo\Search\Store\UnavailableIndexStore((string) $why),
         };
+    }
+
+    public static function makeDemandResolver(ContainerInterface $container): \Thallo\Search\Lifecycle\DemandResolver
+    {
+        return new \Thallo\Search\Lifecycle\DemandResolver(
+            $container->get(SearchSourceRegistry::class),
+            $container->get(\Thallo\Contracts\Settings\SystemChannel::class),
+            $container->get(\Thallo\Search\Lifecycle\StateRepository::class),
+            $container->get(\Thallo\Search\Lifecycle\SearchIndexLocator::class),
+        );
     }
 
     public static function makeLocator(ContainerInterface $container): \Thallo\Search\Lifecycle\SearchIndexLocator

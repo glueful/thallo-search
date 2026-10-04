@@ -43,7 +43,7 @@ Indexing needs the queue worker and the scheduler running. While the capability 
 A choice that cannot be honoured is never quietly swapped for the other engine — indexing a site
 into a second engine behind its operator's back is how a search goes stale unnoticed. Search is
 then **unavailable**: the endpoint answers 503, publishing is never affected, and
-`search:status` says why. After changing engines, rebuild every kind.
+`search:status` says why. After a switch of engines every kind rebuilds itself on the new one.
 
 The PostgreSQL engine keeps its index in the `search_documents` table (`php glueful
 thallo:provision` creates it). Postgres maintains the search vector itself, as a

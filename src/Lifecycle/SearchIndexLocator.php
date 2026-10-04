@@ -43,8 +43,12 @@ final class SearchIndexLocator
         if ($row === null) {
             return ['active' => null, 'building' => null];
         }
+        $active = $row['active_target'] ?? null;
         return [
-            'active' => self::target($this->engine, $row['active_target'] ?? null, (int) $row['generation']),
+            // An index the other engine built is never read or written (the engine was switched).
+            'active' => $this->ownsTarget($active)
+                ? self::target($this->engine, $active, (int) $row['generation'])
+                : null,
             'building' => $row['building_generation'] === null ? null
                 : self::target($this->engine, $row['building_target'] ?? null, (int) $row['building_generation']),
         ];
@@ -70,7 +74,16 @@ final class SearchIndexLocator
     public function readMode(string $kind): string
     {
         $row = $this->state->row($kind);
-        return $row !== null && (string) ($row['active_target'] ?? '') !== '' ? 'ready' : 'rebuilding';
+        return $row !== null && $this->ownsTarget($row['active_target'] ?? null) ? 'ready' : 'rebuilding';
+    }
+
+    /** Whether an active target name is this engine's: Postgres's is `pg`, Meilisearch's anything else. */
+    public function ownsTarget(mixed $name): bool
+    {
+        if (!is_string($name) || $name === '') {
+            return false;
+        }
+        return ($name === Target::POSTGRES) === ($this->engine === self::POSTGRES);
     }
 
     public function buildTarget(string $kind, int $generation): Target

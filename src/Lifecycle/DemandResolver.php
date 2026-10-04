@@ -18,19 +18,26 @@ final class DemandResolver
         private readonly SearchSourceRegistry $sources,
         private readonly SystemChannel $flags,
         private readonly ?StateRepository $state = null,
+        /** The engine answering now; an active index the other engine built needs rebuilding. */
+        private readonly ?SearchIndexLocator $locator = null,
     ) {
     }
 
     /**
      * Why a kind needs rebuilding in the current workspace, or null: no state row yet (a new
-     * workspace), a capability switched since the last successful build, a changed document shape,
-     * or recorded demand not yet satisfied.
+     * workspace), an active index the other engine built (the engine was switched), a capability
+     * switched since the last successful build, a changed document shape, or recorded demand not yet
+     * satisfied.
      */
     public function pending(string $kind): ?string
     {
         $row = $this->state?->row($kind);
         if ($row === null) {
             return 'new_workspace';
+        }
+        $active = $row['active_target'] ?? null;
+        if ($this->locator !== null && is_string($active) && $active !== '' && !$this->locator->ownsTarget($active)) {
+            return 'engine';
         }
         if ($this->relevantVersion($kind) > (int) $row['reconciled_version']) {
             return 'capability';

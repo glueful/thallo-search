@@ -8,7 +8,7 @@ return [
 
     // Which engine answers: auto | postgres | meilisearch. `auto` is Meilisearch where the site
     // has configured one (MEILISEARCH_HOST is set) and the site's own PostgreSQL otherwise — so
-    // search needs nothing installed. Changing engines: run `php glueful search:reindex`.
+    // search needs nothing installed. Changing engines rebuilds every kind on the new one by itself.
     'engine' => env('SEARCH_ENGINE', 'auto'),
     'meilisearch_configured' => env('MEILISEARCH_HOST') !== null && env('MEILISEARCH_HOST') !== '',
 
