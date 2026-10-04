@@ -464,6 +464,15 @@ final class StateRepository
         });
     }
 
+    /** When the oldest demand not yet satisfied was recorded, or null if none is outstanding. */
+    public function oldestUnsatisfiedDemandAt(string $kind): ?string
+    {
+        $satisfied = (int) ($this->row($kind)['satisfied_seq'] ?? 0);
+        $row = $this->db->table(self::DEMAND)->where('kind', '=', $kind)->where('seq', '>', $satisfied)
+            ->orderBy('seq', 'ASC')->first();
+        return $row === null ? null : (string) $row['created_at'];
+    }
+
     /** A wake-up could not be queued: say so, without touching the status a build owns. */
     public function noteQueueFailure(string $kind, string $error): void
     {

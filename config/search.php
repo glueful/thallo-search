@@ -29,6 +29,9 @@ return [
     // promotion still finds it.
     'build_batch' => (int) env('SEARCH_BUILD_BATCH', 200),
     'retire_grace' => (int) env('SEARCH_RETIRE_GRACE', 120),
+    // Seconds a rebuild request may wait unclaimed before Settings › Search says background
+    // processing hasn't picked it up.
+    'stall_after' => (int) env('SEARCH_STALL_AFTER', 600),
 
     // Snippet crop length, in words, for highlighted body excerpts.
     'snippet_length' => (int) env('SEARCH_SNIPPET_LENGTH', 40),

@@ -142,6 +142,9 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             \Thallo\Search\Lifecycle\Cutover::class => [
                 'shared' => true, 'factory' => [self::class, 'makeCutover'],
             ],
+            \Thallo\Search\Http\SearchAdminController::class => [
+                'shared' => true, 'factory' => [self::class, 'makeAdminController'],
+            ],
             \Thallo\Search\Http\SearchPageThrottle::class => [
                 'shared' => true, 'factory' => [self::class, 'makePageThrottle'],
             ],
@@ -296,6 +299,19 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             $container->get(\Thallo\Search\Lifecycle\Drainer::class),
             $container->get(Connection::class),
             $container->get(LoggerInterface::class),
+        );
+    }
+
+    public static function makeAdminController(ContainerInterface $container): \Thallo\Search\Http\SearchAdminController
+    {
+        return new \Thallo\Search\Http\SearchAdminController(
+            $container->get(\Thallo\Search\Lifecycle\SearchDemand::class),
+            $container->get(\Thallo\Search\Lifecycle\StateRepository::class),
+            $container->get(\Thallo\Search\Lifecycle\DemandResolver::class),
+            $container->get(\Thallo\Search\Query\KindAvailability::class),
+            $container->get(SearchSourceRegistry::class),
+            $container->get(\Thallo\Search\Store\IndexStore::class),
+            (int) config($container->get(ApplicationContext::class), 'search.stall_after', 600),
         );
     }
 
@@ -529,6 +545,7 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
 
         if (self::enabled($context)) {
             $this->loadRoutesFrom(__DIR__ . '/../routes/public-routes.php');
+            $this->loadRoutesFrom(__DIR__ . '/../routes/admin-routes.php');
 
             $this->commands([
                 ReindexCommand::class,
