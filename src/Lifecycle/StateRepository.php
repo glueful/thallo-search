@@ -250,7 +250,10 @@ final class StateRepository
                 return;
             }
             $stored = (string) $existing['task_uid'];
-            if ($existing['status'] === 'pending' && $stored !== '' && $stored !== $uids) {
+            // Pending tasks may still run: a write may narrow them to those still outstanding, or
+            // record their outcome, but never replace them with a retry's tasks.
+            $narrowing = $uids === '' ? false : array_diff(explode(',', $uids), explode(',', $stored)) === [];
+            if ($existing['status'] === 'pending' && $stored !== '' && $stored !== $uids && !$narrowing) {
                 throw new \LogicException(
                     "Entry {$entrySeq} still has pending tasks on {$targetKey}; confirm them first.",
                 );
@@ -329,10 +332,18 @@ final class StateRepository
         });
     }
 
+    /** Record why an entry failed; it stays unresolved and is retried. */
+    public function markEntryFailed(string $kind, int $seq, string $error): void
+    {
+        $this->db->table(self::CHANGES)->where('kind', '=', $kind)->where('seq', '=', $seq)
+            ->update(['failed_at' => $this->clock->now(), 'error' => ErrorText::sanitize($error)]);
+    }
+
     public function setStatus(Fence $fence, string $status, ?string $error = null): void
     {
         $this->fenced($fence, function (array $row, string $now) use ($fence, $status, $error): void {
-            $this->update($fence->kind, ['status' => $status, 'last_error' => $error, 'updated_at' => $now]);
+            $text = $error === null ? null : ErrorText::sanitize($error);
+            $this->update($fence->kind, ['status' => $status, 'last_error' => $text, 'updated_at' => $now]);
         });
     }
 
@@ -344,7 +355,10 @@ final class StateRepository
     {
         $this->locked($kind, function (array $row, string $now) use ($kind, $error): void {
             $status = $row['status'] === 'building' ? 'building' : 'out_of_date';
-            $this->update($kind, ['status' => $status, 'last_error' => $error, 'updated_at' => $now]);
+            $this->update(
+                $kind,
+                ['status' => $status, 'last_error' => ErrorText::sanitize($error), 'updated_at' => $now],
+            );
         });
     }
 

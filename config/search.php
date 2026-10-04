@@ -15,6 +15,16 @@ return [
     // Meilisearch index name (the pack owns ONE shared content index).
     'index' => env('SEARCH_INDEX', 'content'),
 
+    // The index lifecycle (search block spec §3.5). Seconds a build's or a drainer's lease lasts;
+    // how long one engine request may take and the margin kept before a lease ends (a drainer stops
+    // sending with less left, and a takeover waits that long past the old lease); and how long a
+    // Meilisearch task is awaited before it is reported as still pending.
+    'build_lease' => (int) env('SEARCH_BUILD_LEASE', 120),
+    'drainer_lease' => (int) env('SEARCH_DRAINER_LEASE', 60),
+    'request_timeout' => (int) env('SEARCH_REQUEST_TIMEOUT', 10),
+    'lease_margin' => (int) env('SEARCH_LEASE_MARGIN', 5),
+    'meilisearch_task_timeout' => (int) env('SEARCH_MEILISEARCH_TASK_TIMEOUT', 10),
+
     // Snippet crop length, in words, for highlighted body excerpts.
     'snippet_length' => (int) env('SEARCH_SNIPPET_LENGTH', 40),
 

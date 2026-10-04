@@ -61,6 +61,27 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             SearchSourceRegistry::class => [
                 'class' => DefaultSearchSourceRegistry::class, 'shared' => true,
             ],
+            \Thallo\Search\Lifecycle\Workspace::class => [
+                'class' => \Thallo\Search\Lifecycle\Workspace::class, 'shared' => true, 'autowire' => true,
+            ],
+            \Thallo\Search\Lifecycle\Clock::class => [
+                'class' => \Thallo\Search\Lifecycle\DatabaseClock::class, 'shared' => true, 'autowire' => true,
+            ],
+            \Thallo\Search\Lifecycle\StateRepository::class => [
+                'class' => \Thallo\Search\Lifecycle\StateRepository::class, 'shared' => true, 'autowire' => true,
+            ],
+            \Thallo\Search\Store\IndexStore::class => [
+                'shared' => true, 'factory' => [self::class, 'makeIndexStore'],
+            ],
+            \Thallo\Search\Lifecycle\SearchIndexLocator::class => [
+                'shared' => true, 'factory' => [self::class, 'makeLocator'],
+            ],
+            \Thallo\Search\Lifecycle\Drainer::class => [
+                'shared' => true, 'factory' => [self::class, 'makeDrainer'],
+            ],
+            \Thallo\Contracts\Search\SearchIndex::class => [
+                'shared' => true, 'factory' => [self::class, 'makeSearchIndex'],
+            ],
             SearchBackend::class => [
                 'shared' => true, 'factory' => [self::class, 'makeSearchBackend'],
             ],
@@ -122,6 +143,75 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             ),
             default => new UnavailableSearchBackend((string) $why),
         };
+    }
+
+    /** The engine's index store, chosen the same way as the engine itself (search block spec §3.3). */
+    public static function makeIndexStore(ContainerInterface $container): \Thallo\Search\Store\IndexStore
+    {
+        $context = $container->get(ApplicationContext::class);
+        $db = $container->get(Connection::class);
+        [$engine, $why] = SearchEngineChoice::resolve(
+            (string) config($context, 'search.engine', 'auto'),
+            $db->getDriverName(),
+            (bool) config($context, 'search.meilisearch_configured', false),
+            $container->has(IndexManager::class),
+        );
+        return match ($engine) {
+            SearchEngineChoice::POSTGRES => new \Thallo\Search\Store\PostgresIndexStore(
+                $db,
+                $container->get(\Thallo\Search\Lifecycle\StateRepository::class),
+            ),
+            SearchEngineChoice::MEILISEARCH => new \Thallo\Search\Store\MeilisearchIndexStore(
+                LiveMeilisearchIndex::fromContainer($container),
+                1000 * (int) config($context, 'search.meilisearch_task_timeout', 10),
+                50,
+                (string) config($context, 'search.index', 'content'),
+            ),
+            default => new \Thallo\Search\Store\UnavailableIndexStore((string) $why),
+        };
+    }
+
+    public static function makeLocator(ContainerInterface $container): \Thallo\Search\Lifecycle\SearchIndexLocator
+    {
+        $context = $container->get(ApplicationContext::class);
+        $store = $container->get(\Thallo\Search\Store\IndexStore::class);
+        return new \Thallo\Search\Lifecycle\SearchIndexLocator(
+            $container->get(\Thallo\Search\Lifecycle\StateRepository::class),
+            $container->get(\Thallo\Search\Lifecycle\Workspace::class),
+            $store instanceof \Thallo\Search\Store\MeilisearchIndexStore
+                ? \Thallo\Search\Lifecycle\SearchIndexLocator::MEILISEARCH
+                : \Thallo\Search\Lifecycle\SearchIndexLocator::POSTGRES,
+            (string) config($context, 'search.index', 'content'),
+        );
+    }
+
+    public static function makeDrainer(ContainerInterface $container): \Thallo\Search\Lifecycle\Drainer
+    {
+        $context = $container->get(ApplicationContext::class);
+        return new \Thallo\Search\Lifecycle\Drainer(
+            $container->get(\Thallo\Search\Lifecycle\StateRepository::class),
+            $container->get(\Thallo\Search\Store\IndexStore::class),
+            $container->get(SearchSourceRegistry::class),
+            $container->get(\Thallo\Search\Lifecycle\SearchIndexLocator::class),
+            (int) config($context, 'search.drainer_lease', 60),
+            (int) config($context, 'search.request_timeout', 10),
+            (int) config($context, 'search.lease_margin', 5),
+            $container->get(LoggerInterface::class),
+        );
+    }
+
+    /** Live while search is on; a no-op otherwise (the reconcile on re-enable rebuilds). */
+    public static function makeSearchIndex(ContainerInterface $container): \Thallo\Contracts\Search\SearchIndex
+    {
+        if (!self::enabled($container->get(ApplicationContext::class))) {
+            return new \Thallo\Search\Lifecycle\NullSearchIndex();
+        }
+        return new \Thallo\Search\Lifecycle\LiveSearchIndex(
+            $container->get(\Thallo\Search\Lifecycle\StateRepository::class),
+            $container->get(\Thallo\Search\Lifecycle\Drainer::class),
+            $container->get(Connection::class),
+            $container->get(LoggerInterface::class),
+        );
     }
 
     public static function makeDocumentBuilder(ContainerInterface $container): DocumentBuilder
