@@ -7,7 +7,6 @@ namespace Thallo\Search\Store;
 use Glueful\Database\Connection;
 use Thallo\Contracts\Search\KindFilter;
 use Thallo\Contracts\Search\SearchDocument;
-use Thallo\Search\Engine\PostgresFtsBackend;
 use Thallo\Search\Identity\DocumentId;
 use Thallo\Search\Lifecycle\Fence;
 use Thallo\Search\Lifecycle\StateRepository;
@@ -83,18 +82,16 @@ final class PostgresIndexStore implements IndexStore
 
     public function search(array $targets, StoreQuery $query): StoreResult
     {
-        $words = PostgresFtsBackend::words($query->q);
+        $words = PostgresTextSearch::words($query->q);
         if ($words === []) {
             return new StoreResult([], 0);
         }
-        [$kindClause, $kindBindings] = $query->legacy
-            ? self::legacyClause($query->kinds)
-            : self::kindClause($query->kinds);
+        [$kindClause, $kindBindings] = self::kindClause($query->kinds);
         if ($kindClause === null) {
             return new StoreResult([], 0);
         }
 
-        $config = PostgresFtsBackend::configFor($query->locale);
+        $config = PostgresTextSearch::configFor($query->locale);
         // Per word, its stem in the request's language OR the word as a prefix; all words AND-ed.
         $perWord = "(plainto_tsquery(?::regconfig, ?) || to_tsquery('simple', ?))";
         $tsquery = '(' . implode(' && ', array_fill(0, count($words), $perWord)) . ')';
@@ -170,7 +167,7 @@ final class PostgresIndexStore implements IndexStore
             'title' => $document->title,
             'body' => $document->body,
             'meta' => $document->meta === [] ? null : json_encode($document->meta, JSON_THROW_ON_ERROR),
-            'ts_config' => PostgresFtsBackend::configFor($document->locale === '*' ? 'simple' : $document->locale),
+            'ts_config' => PostgresTextSearch::configFor($document->locale === '*' ? 'simple' : $document->locale),
             'generation' => $generation,
             'updated_at' => gmdate('Y-m-d H:i:s'),
         ]);
@@ -202,27 +199,5 @@ final class PostgresIndexStore implements IndexStore
             array_push($bindings, $kind, ...$filter->subtypes);
         }
         return $parts === [] ? [null, []] : ['(' . implode(' OR ', $parts) . ')', $bindings];
-    }
-
-    /**
-     * The legacy documents carry no kind: they are entries, filtered by content type.
-     *
-     * @param array<string, KindFilter> $kinds
-     * @return array{0: ?string, 1: list<string>}
-     */
-    private static function legacyClause(array $kinds): array
-    {
-        $filter = $kinds['entries'] ?? KindFilter::none();
-        return match ($filter->mode) {
-            KindFilter::ALL => ['(kind IS NULL)', []],
-            KindFilter::SUBTYPES => [
-                '(kind IS NULL AND content_type_uuid IN (' . implode(
-                    ', ',
-                    array_fill(0, count($filter->subtypes), '?'),
-                ) . '))',
-                $filter->subtypes,
-            ],
-            default => [null, []],
-        };
     }
 }

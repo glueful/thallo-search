@@ -57,25 +57,14 @@ final class SearchIndexLocator
     }
 
     /**
-     * What a query reads for a kind (search block spec §3.5.6, §3.5.9): `v2` (its promoted target),
-     * `empty` (cut over, but this kind has no promoted target yet), `legacy` (entries before the
-     * cutover, where reading the old documents is safe — Postgres, whose legacy rows belong to the
-     * workspace, or a single-store Meilisearch site), or `rebuilding` (a workspace with enforced
-     * tenancy whose isolated index is not ready, which never reads the shared legacy index).
+     * Whether a query can read a kind (search block spec §3.5.9): `ready` once it has a promoted
+     * target, `rebuilding` until its first build is promoted. A rebuild of a ready kind keeps
+     * reading the promoted target.
      */
     public function readMode(string $kind): string
     {
-        $row = $this->state->row($kind) ?? $this->state->row('entries');
-        $format = (string) ($row['format'] ?? 'legacy');
-        if ($format === 'v2') {
-            $own = $this->state->row($kind);
-            return $own !== null && (string) ($own['active_target'] ?? '') !== '' ? 'v2' : 'empty';
-        }
-        if ($kind !== 'entries') {
-            return 'empty';
-        }
-        $legacySafe = $this->engine === self::POSTGRES || !$this->workspace->enforcementActive();
-        return $legacySafe ? 'legacy' : 'rebuilding';
+        $row = $this->state->row($kind);
+        return $row !== null && (string) ($row['active_target'] ?? '') !== '' ? 'ready' : 'rebuilding';
     }
 
     public function buildTarget(string $kind, int $generation): Target

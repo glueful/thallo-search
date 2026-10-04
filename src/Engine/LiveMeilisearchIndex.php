@@ -108,14 +108,6 @@ final class LiveMeilisearchIndex implements MeilisearchIndex
         return ['hits' => $hits, 'estimatedTotalHits' => (int) ($raw['estimatedTotalHits'] ?? count($hits))];
     }
 
-    public function rawSearch(string $uid, string $query, array $params): array
-    {
-        try {
-            return $this->index($uid)->rawSearch($query, $params);
-        } catch (ApiException $e) {
-            throw $this->notFound($e, [['indexUid' => $uid]]) ?? $e;
-        }
-    }
 
     public function reachable(string $uid): bool
     {

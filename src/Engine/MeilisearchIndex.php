@@ -56,14 +56,6 @@ interface MeilisearchIndex
      */
     public function federatedSearch(array $queries, int $limit, int $offset): array;
 
-    /**
-     * A plain search of one index (the legacy shared index).
-     *
-     * @param array<string, mixed> $params
-     * @return array<string, mixed>
-     * @throws IndexNotFound
-     */
-    public function rawSearch(string $uid, string $query, array $params): array;
 
     public function reachable(string $uid): bool;
 }

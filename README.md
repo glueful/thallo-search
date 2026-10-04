@@ -198,9 +198,8 @@ is promoted only once every journal entry is acknowledged on it; fences keep a b
 and a superseded attempt from writing over each other. Rebuild requests are durable: the
 scheduled `search:reconcile` picks them up every minute, and `--full` once a day rebuilds every
 kind, repairing any change lost between a commit and its event. A failure is recorded on the row
-(**Settings › Search** shows it) and never breaks the save. Sites upgrading from the single
-`content` index keep reading it until the new entries index is ready, except where workspaces
-are enforced on Meilisearch, which show rebuilding until their own index is ready.
+(**Settings › Search** shows it) and never breaks the save. A kind answers "rebuilding" until
+its first build is promoted; an all-kinds search leaves such a kind out.
 
 ## Scope
 

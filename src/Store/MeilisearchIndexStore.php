@@ -28,8 +28,6 @@ final class MeilisearchIndexStore implements IndexStore
         private readonly MeilisearchIndex $index,
         private readonly int $taskTimeoutMs = 10_000,
         private readonly int $pollMs = 50,
-        /** The legacy shared index, read while a single-store site still cuts over. */
-        private readonly string $legacyUid = 'content',
     ) {
     }
 
@@ -95,9 +93,6 @@ final class MeilisearchIndexStore implements IndexStore
     /** @param array<string, Target> $targets the active target per kind */
     public function search(array $targets, StoreQuery $query): StoreResult
     {
-        if ($query->legacy) {
-            return $this->searchLegacy($this->legacyUid, $query);
-        }
         $queries = [];
         foreach ($query->kinds as $kind => $filter) {
             $target = $targets[$kind] ?? null;
@@ -127,36 +122,6 @@ final class MeilisearchIndexStore implements IndexStore
         return new StoreResult($hits, $raw['estimatedTotalHits']);
     }
 
-    /** The legacy shared index: entries only, filtered by content type. */
-    public function searchLegacy(string $uid, StoreQuery $query): StoreResult
-    {
-        $filter = $query->kinds['entries'] ?? KindFilter::none();
-        if ($filter->mode === KindFilter::NONE) {
-            return new StoreResult([], 0);
-        }
-        $clauses = ['locale = ' . self::quote($query->locale)];
-        if ($filter->mode === KindFilter::SUBTYPES) {
-            $clauses[] = 'content_type_uuid IN [' . implode(', ', array_map(self::quote(...), $filter->subtypes)) . ']';
-        }
-        $raw = $this->index->rawSearch($uid, $query->q, [
-            'limit' => $query->limit,
-            'offset' => $query->offset,
-            'filter' => implode(' AND ', $clauses),
-            'attributesToRetrieve' => ['entry_uuid', 'content_type_uuid', 'locale'],
-            'showRankingScore' => true,
-        ]);
-        $hits = [];
-        foreach ((array) ($raw['hits'] ?? []) as $hit) {
-            $hits[] = new StoreHit(
-                'entries',
-                (string) ($hit['entry_uuid'] ?? ''),
-                (string) ($hit['locale'] ?? $query->locale),
-                isset($hit['content_type_uuid']) ? (string) $hit['content_type_uuid'] : null,
-                (float) ($hit['_rankingScore'] ?? 0.0),
-            );
-        }
-        return new StoreResult($hits, (int) ($raw['estimatedTotalHits'] ?? count($hits)));
-    }
 
     public function createTarget(Target $target): void
     {

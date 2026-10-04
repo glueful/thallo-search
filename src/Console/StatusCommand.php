@@ -12,7 +12,6 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Thallo\Contracts\Schema\ContentTypeReader;
 use Thallo\Contracts\Search\SearchSourceRegistry;
-use Thallo\Contracts\Settings\SystemChannel;
 use Thallo\Search\Index\DocumentBuilder;
 use Thallo\Search\Lifecycle\DemandResolver;
 use Thallo\Search\Lifecycle\StateRepository;
@@ -23,8 +22,7 @@ use Thallo\Search\Store\IndexStore;
 /**
  * Where the search index stands (search block spec §3.8): the engine and its readiness, then each
  * kind's status, documents, progress, last success, last error and outstanding demand — the same
- * table as Settings › Search. `--all` covers every workspace and the installation-wide legacy
- * index state.
+ * table as Settings › Search. `--all` covers every workspace.
  */
 #[AsCommand(name: 'search:status', description: 'Report the search engine and each kind\'s index status.')]
 final class StatusCommand extends BaseCommand
@@ -36,7 +34,6 @@ final class StatusCommand extends BaseCommand
         private readonly StateRepository $state,
         private readonly DemandResolver $demand,
         private readonly Workspace $workspace,
-        private readonly SystemChannel $flags,
         private readonly DocumentBuilder $builder,
         private readonly ContentTypeReader $types,
     ) {
@@ -49,7 +46,7 @@ final class StatusCommand extends BaseCommand
             'all',
             null,
             InputOption::VALUE_NONE,
-            'Every workspace, and the installation-wide legacy index.',
+            'Every workspace.',
         );
     }
 
@@ -66,7 +63,6 @@ final class StatusCommand extends BaseCommand
                 $output->writeln('Workspace: ' . ($workspace ?? 'single store'));
                 $this->kindTable($output);
             });
-            $output->writeln('Legacy index: ' . ($this->flags->get('search.legacy_index') ?? 'present'));
         } else {
             $this->kindTable($output);
         }

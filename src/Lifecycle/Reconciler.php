@@ -31,10 +31,6 @@ final class Reconciler
         private readonly Workspace $workspace,
         private readonly SystemChannel $flags,
         private readonly LoggerInterface $logger,
-        /** A hook run after each workspace's kinds (the cutover check plugs in here). */
-        private readonly ?\Closure $afterWorkspace = null,
-        /** A hook run once after every workspace (installation-wide legacy-index retirement). */
-        private readonly ?\Closure $afterAll = null,
     ) {
     }
 
@@ -44,9 +40,6 @@ final class Reconciler
         $outcomes = [];
         foreach (array_keys($this->availability->available()) as $kind) {
             $outcomes[$kind] = $this->runKind($kind, $full);
-        }
-        if ($this->afterWorkspace !== null) {
-            ($this->afterWorkspace)();
         }
         return $outcomes;
     }
@@ -78,13 +71,6 @@ final class Reconciler
                 $this->logger->warning('Search reconcile failed for a workspace: ' . $message);
             }
         });
-        if ($this->afterAll !== null) {
-            try {
-                ($this->afterAll)();
-            } catch (\Throwable $e) {
-                $this->logger->warning('Search legacy index not retired: ' . ErrorText::sanitize($e->getMessage()));
-            }
-        }
     }
 
     /**

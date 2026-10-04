@@ -59,17 +59,11 @@ final class SearchQueryService
             );
         }
 
-        $modes = [];
-        foreach ($kinds as $kind) {
-            $modes[$kind] = $this->locator->readMode($kind);
-            if ($modes[$kind] === 'rebuilding') {
-                return SearchOutcome::of(SearchOutcome::REBUILDING);
-            }
-        }
-        $legacy = ($modes['entries'] ?? null) === 'legacy';
+        // Every kind that has been built is searched; only when none of them has is the answer
+        // "rebuilding" — a kind still on its first build drops out of an all-kinds search.
         $filters = [];
         foreach ($kinds as $kind) {
-            if ($modes[$kind] !== 'v2' && $modes[$kind] !== 'legacy') {
+            if ($this->locator->readMode($kind) !== 'ready') {
                 continue;
             }
             $filter = $this->sources->all()[$kind]->visibilityFilter($audience);
@@ -79,7 +73,7 @@ final class SearchQueryService
             $filters[$kind] = $filter;
         }
         if ($filters === []) {
-            return SearchOutcome::of(SearchOutcome::NO_MATCHES);
+            return SearchOutcome::of(SearchOutcome::REBUILDING);
         }
 
         $binding = CursorBinding::of($input, $this->workspace->current() ?? '', $audience);
@@ -92,7 +86,7 @@ final class SearchQueryService
         }
 
         try {
-            return $this->collect($input, $audience, $limit, $refill, $filters, $legacy, $start, $binding);
+            return $this->collect($input, $audience, $limit, $refill, $filters, $start, $binding);
         } catch (\Throwable) {
             return SearchOutcome::of(SearchOutcome::UNAVAILABLE);
         }
@@ -105,7 +99,6 @@ final class SearchQueryService
         int $limit,
         bool $refill,
         array $filters,
-        bool $legacy,
         int $start,
         string $binding,
     ): SearchOutcome {
@@ -121,7 +114,6 @@ final class SearchQueryService
                 $filters,
                 $limit,
                 $start + $examined,
-                $legacy,
             ));
             $total = $result->total;
             if ($result->hits === []) {

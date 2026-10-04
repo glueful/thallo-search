@@ -30,8 +30,7 @@ final class DocumentBuilder
 
     /**
      * The Meilisearch document id for one entry+locale. Meilisearch ids allow only
-     * alphanumerics, `-` and `_` — never use `:` or other separators here. Deletes
-     * (MeilisearchBackend::deleteEntry) must compose the identical id.
+     * alphanumerics, `-` and `_` — never use `:` or other separators here.
      */
     public static function documentId(string $entryUuid, string $locale): string
     {

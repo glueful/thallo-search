@@ -6,8 +6,8 @@ use Glueful\Database\Migrations\MigrationInterface;
 use Glueful\Database\Schema\Interfaces\SchemaBuilderInterface;
 
 /**
- * The Postgres full-text engine's index (Engine\PostgresFtsBackend): one row per published
- * entry+locale, holding what the search API returns and a `tsvector` of what it matches.
+ * The Postgres full-text engine's index (Store\PostgresIndexStore): one row per document, holding
+ * what it matches on and a `tsvector` of it.
  *
  * The table is created on every driver — the search pack's schema is the same everywhere — but
  * the generated `tsv` column and its GIN index are Postgres's, added only there; on another driver the

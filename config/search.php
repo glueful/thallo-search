@@ -12,7 +12,7 @@ return [
     'engine' => env('SEARCH_ENGINE', 'auto'),
     'meilisearch_configured' => env('MEILISEARCH_HOST') !== null && env('MEILISEARCH_HOST') !== '',
 
-    // Meilisearch index name (the pack owns ONE shared content index).
+    // The prefix of every Meilisearch index name: {index}_v2_[{workspace}_]{kind}_g{build}.
     'index' => env('SEARCH_INDEX', 'content'),
 
     // The index lifecycle (search block spec §3.5). Seconds a build's or a drainer's lease lasts;

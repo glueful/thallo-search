@@ -48,7 +48,6 @@ final class SearchAdminController
                 'available' => $available,
                 'reason' => $available ? null : $this->availability->reasonFor($kind),
                 'status' => (string) ($row['status'] ?? 'pending'),
-                'format' => (string) ($row['format'] ?? 'legacy'),
                 'documents' => (int) ($row['documents'] ?? 0),
                 'processed' => (int) ($row['processed'] ?? 0),
                 'last_success_at' => $row['last_success_at'] ?? null,

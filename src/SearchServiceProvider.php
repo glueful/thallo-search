@@ -18,13 +18,9 @@ use Thallo\Contracts\Search\ContentReindexer;
 use Thallo\Search\Console\ReindexCommand;
 use Thallo\Search\Console\StatusCommand;
 use Thallo\Search\Engine\LiveMeilisearchIndex;
-use Thallo\Search\Engine\MeilisearchBackend;
-use Thallo\Search\Engine\PostgresFtsBackend;
 use Thallo\Contracts\Search\SearchSourceRegistry;
-use Thallo\Search\Engine\SearchBackend;
 use Thallo\Search\Sources\DefaultSearchSourceRegistry;
 use Thallo\Search\Engine\SearchEngineChoice;
-use Thallo\Search\Engine\UnavailableSearchBackend;
 use Thallo\Search\Http\SearchController;
 use Thallo\Search\Index\DocumentBuilder;
 use Thallo\Search\Index\NullContentReindexer;
@@ -82,17 +78,11 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             \Thallo\Contracts\Search\SearchIndex::class => [
                 'shared' => true, 'factory' => [self::class, 'makeSearchIndex'],
             ],
-            SearchBackend::class => [
-                'shared' => true, 'factory' => [self::class, 'makeSearchBackend'],
-            ],
             DocumentBuilder::class => [
                 'shared' => true, 'factory' => [self::class, 'makeDocumentBuilder'],
             ],
             SearchContentReindexer::class => [
                 'class' => SearchContentReindexer::class, 'shared' => true, 'autowire' => true,
-            ],
-            \Thallo\Search\Index\LegacyEntryIndexer::class => [
-                'class' => \Thallo\Search\Index\LegacyEntryIndexer::class, 'shared' => true, 'autowire' => true,
             ],
             ContentReindexer::class => [
                 'shared' => true, 'factory' => [self::class, 'makeContentReindexer'],
@@ -138,9 +128,6 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             ],
             \Thallo\Search\Lifecycle\SearchDemand::class => [
                 'shared' => true, 'factory' => [self::class, 'makeSearchDemand'],
-            ],
-            \Thallo\Search\Lifecycle\Cutover::class => [
-                'shared' => true, 'factory' => [self::class, 'makeCutover'],
             ],
             \Thallo\Search\Http\SearchAdminController::class => [
                 'shared' => true, 'factory' => [self::class, 'makeAdminController'],
@@ -207,30 +194,6 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             $container->get(\Thallo\Search\Query\CursorSigner::class),
             $container->get(\Thallo\Search\Lifecycle\Workspace::class),
         );
-    }
-
-    public static function makeSearchBackend(ContainerInterface $container): SearchBackend
-    {
-        $context = $container->get(ApplicationContext::class);
-        $snippetLength = (int) config($context, 'search.snippet_length', 40);
-        $db = $container->get(Connection::class);
-
-        [$engine, $why] = SearchEngineChoice::resolve(
-            (string) config($context, 'search.engine', 'auto'),
-            $db->getDriverName(),
-            (bool) config($context, 'search.meilisearch_configured', false),
-            $container->has(IndexManager::class),
-        );
-
-        return match ($engine) {
-            SearchEngineChoice::POSTGRES => new PostgresFtsBackend($db, $snippetLength),
-            SearchEngineChoice::MEILISEARCH => new MeilisearchBackend(
-                LiveMeilisearchIndex::fromContainer($container),
-                $snippetLength,
-                (string) config($context, 'search.index', 'content'),
-            ),
-            default => new UnavailableSearchBackend((string) $why),
-        };
     }
 
     /** The engine's index store, chosen the same way as the engine itself (search block spec §3.3). */
@@ -399,21 +362,6 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             $container->get(\Thallo\Search\Lifecycle\Workspace::class),
             $container->get(\Thallo\Contracts\Settings\SystemChannel::class),
             $container->get(LoggerInterface::class),
-            static fn () => $container->get(\Thallo\Search\Lifecycle\Cutover::class)->flipIfReady(),
-            static fn () => $container->get(\Thallo\Search\Lifecycle\Cutover::class)->retireLegacyIndexIfUnused(),
-        );
-    }
-
-    public static function makeCutover(ContainerInterface $container): \Thallo\Search\Lifecycle\Cutover
-    {
-        return new \Thallo\Search\Lifecycle\Cutover(
-            $container->get(\Thallo\Search\Lifecycle\StateRepository::class),
-            $container->get(\Thallo\Search\Store\IndexStore::class),
-            $container->get(\Thallo\Search\Lifecycle\SearchIndexLocator::class),
-            $container->get(\Thallo\Search\Lifecycle\Workspace::class),
-            $container->get(\Thallo\Contracts\Settings\SystemChannel::class),
-            $container->get(Connection::class),
-            (string) config($container->get(ApplicationContext::class), 'search.index', 'content'),
         );
     }
 

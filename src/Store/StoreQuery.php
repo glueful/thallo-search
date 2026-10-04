@@ -8,8 +8,7 @@ use Thallo\Contracts\Search\KindFilter;
 
 /**
  * One engine query (search block spec §3.4): the words, the locale (documents in it or in every
- * locale), each requested kind's visibility filter, and a raw window. `legacy` reads the old,
- * kind-less documents, as entries.
+ * locale), each requested kind's visibility filter, and a raw window.
  */
 final class StoreQuery
 {
@@ -20,7 +19,6 @@ final class StoreQuery
         public readonly array $kinds,
         public readonly int $limit,
         public readonly int $offset,
-        public readonly bool $legacy,
     ) {
     }
 }

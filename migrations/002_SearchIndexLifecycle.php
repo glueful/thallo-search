@@ -9,7 +9,7 @@ use Glueful\Database\Schema\Interfaces\SchemaBuilderInterface;
  * The search index's lifecycle (search block spec §3.3, §3.5.1). Documents gain their result kind,
  * source id, subtype, display meta and the generation that wrote them. Four tables, each owned by
  * a workspace, hold the per-kind state (generations, the build claim and lease, the drainer's
- * lease, the cutover format), the change journal, the acknowledgement of each journal entry by
+ * lease), the change journal, the acknowledgement of each journal entry by
  * each physical target, and the rebuild demand.
  *
  * Forward-only for `search_documents`: down() drops the four tables and leaves the document
@@ -20,6 +20,9 @@ final class SearchIndexLifecycle implements MigrationInterface
     public function up(SchemaBuilderInterface $schema): void
     {
         if ($schema->hasTable('search_documents') && !$schema->hasColumn('search_documents', 'kind')) {
+            // The documents written before kinds existed are not carried over: every kind is
+            // rebuilt from its source once the lifecycle runs.
+            $schema->addPendingOperation('DELETE FROM search_documents');
             $schema->alterTable('search_documents', function ($table): void {
                 $table->string('kind', 16)->nullable();
                 $table->string('source_id', 64)->nullable();
@@ -55,7 +58,6 @@ final class SearchIndexLifecycle implements MigrationInterface
                 $table->bigInteger('reconciled_version')->default(0);
                 $table->integer('schema_version')->default(0);
                 $table->string('status', 16)->default('pending');
-                $table->string('format', 8)->default('legacy');
                 $table->integer('processed')->default(0);
                 $table->integer('documents')->default(0);
                 $table->string('last_success_at', 32)->nullable();
