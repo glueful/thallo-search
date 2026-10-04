@@ -263,6 +263,8 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             $container->get(\Thallo\Search\Lifecycle\Drainer::class),
             $container->get(Connection::class),
             $container->get(LoggerInterface::class),
+            self::wake($container->get(ApplicationContext::class)),
+            $container->get(\Thallo\Search\Lifecycle\Workspace::class),
         );
     }
 
