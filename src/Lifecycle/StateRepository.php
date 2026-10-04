@@ -332,6 +332,136 @@ final class StateRepository
         });
     }
 
+    /**
+     * Promote the build target — under the row lock journal appends also take — once every relevant
+     * entry (unresolved, or journaled since the build began, up to the journal head read here) has a
+     * succeeded acknowledgement for it. Returns the seqs still missing one, or null once promoted.
+     * Promoted entries resolve: the build target is now the only one a change must reach.
+     *
+     * @return list<int>|null
+     */
+    public function promote(Fence $builder, Target $target, int $journalStartSeq): ?array
+    {
+        return $this->fenced($builder, function (
+            array $row,
+            string $now
+        ) use (
+            $builder,
+            $target,
+            $journalStartSeq,
+        ): ?array {
+            $head = (int) $row['journal_head'];
+            $relevant = [];
+            foreach (
+                $this->db->table(self::CHANGES)->where(
+                    'kind',
+                    '=',
+                    $builder->kind,
+                )->where('seq', '<=', $head)->get() as $change
+            ) {
+                if ((int) $change['resolved'] === 0 || (int) $change['seq'] > $journalStartSeq) {
+                    $relevant[] = (int) $change['seq'];
+                }
+            }
+            $missing = array_values(array_diff($relevant, $this->ackedFor($builder->kind, $target->key(), $relevant)));
+            if ($missing !== []) {
+                return $missing;
+            }
+            if ($relevant !== []) {
+                $this->db->table(self::CHANGES)->where('kind', '=', $builder->kind)->whereIn('seq', $relevant)
+                    ->update(['resolved' => 1, 'failed_at' => null, 'error' => null]);
+            }
+            $failed = $this->db->table(self::CHANGES)->where('kind', '=', $builder->kind)->where('resolved', '=', 0)
+                ->whereNotNull('failed_at')->count();
+            $this->update($builder->kind, [
+                'generation' => $builder->generation,
+                'active_target' => $target->name,
+                'building_generation' => null,
+                'building_target' => null,
+                'owner_token' => null,
+                'lease_until' => null,
+                'cursor' => null,
+                'status' => $failed > 0 ? 'out_of_date' : 'ready',
+                'last_error' => $failed > 0 ? $row['last_error'] : null,
+                'last_success_at' => $now,
+                'documents' => (int) $row['processed'],
+                'updated_at' => $now,
+            ]);
+            return null;
+        });
+    }
+
+    /** Give up a build (fenced): its claim and build target go, with the status and reason. */
+    public function abandonBuild(Fence $builder, string $status, string $error): void
+    {
+        $this->fenced($builder, function (array $row, string $now) use ($builder, $status, $error): void {
+            $this->update($builder->kind, [
+                'owner_token' => null, 'lease_until' => null, 'building_generation' => null,
+                'building_target' => null, 'cursor' => null,
+                'status' => $status, 'last_error' => ErrorText::sanitize($error), 'updated_at' => $now,
+            ]);
+        });
+    }
+
+    /**
+     * @param list<int> $seqs
+     * @return list<JournalEntry>
+     */
+    public function entries(string $kind, array $seqs): array
+    {
+        if ($seqs === []) {
+            return [];
+        }
+        $rows = $this->db->table(self::CHANGES)->where(
+            'kind',
+            '=',
+            $kind,
+        )->whereIn('seq', $seqs)->orderBy('seq', 'ASC')->get();
+        return array_map(
+            static fn (array $r): JournalEntry => new JournalEntry(
+                $kind,
+                (string) $r['source_id'],
+                (int) $r['seq'],
+                (int) $r['resolved'] === 1,
+            ),
+            $rows,
+        );
+    }
+
+    public function now(): string
+    {
+        return $this->clock->now();
+    }
+
+    /** @return list<array{name: string, retired_at: string}> */
+    public function retiredTargets(string $kind): array
+    {
+        $raw = $this->row($kind)['retired_targets'] ?? null;
+        $list = is_string($raw) ? json_decode($raw, true) : null;
+        return is_array($list) ? array_values($list) : [];
+    }
+
+    public function addRetired(string $kind, string $name): void
+    {
+        $this->locked($kind, function (array $row, string $now) use ($kind, $name): void {
+            $list = $this->retiredTargets($kind);
+            $list[] = ['name' => $name, 'retired_at' => $now];
+            $this->update($kind, ['retired_targets' => json_encode($list, JSON_THROW_ON_ERROR)]);
+        });
+    }
+
+    /** @param list<string> $names the retired targets still within their grace period */
+    public function keepRetired(string $kind, array $names): void
+    {
+        $this->locked($kind, function () use ($kind, $names): void {
+            $list = array_values(array_filter(
+                $this->retiredTargets($kind),
+                static fn (array $r): bool => in_array($r['name'], $names, true),
+            ));
+            $this->update($kind, ['retired_targets' => json_encode($list, JSON_THROW_ON_ERROR)]);
+        });
+    }
+
     /** Record why an entry failed; it stays unresolved and is retried. */
     public function markEntryFailed(string $kind, int $seq, string $error): void
     {

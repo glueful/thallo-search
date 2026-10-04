@@ -166,6 +166,7 @@ final class Drainer
         $this->state->recordAck($fence, $entry->seq, $receipt->targetKey, $uids, $outcome->result->value);
         if ($outcome->result === ConfirmResult::FAILED) {
             // A failed live update is visible at once; the entry stays unresolved and is retried.
+            $this->state->markEntryFailed($entry->kind, $entry->seq, 'A search index task failed.');
             $this->state->markOutOfDate(
                 $entry->kind,
                 "A change to '{$entry->sourceId}' failed on a search index; it will be retried.",
