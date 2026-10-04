@@ -13,21 +13,47 @@ use Thallo\Contracts\Settings\SystemChannel;
  * The workspace boundary for search (search block spec §3.3). With tenancy enforced, the current
  * workspace comes from the server's tenant context, never the request; queued work names its
  * workspace and runs inside it. Without enforcement there is one store and no workspace segment.
- * Tenancy's flags are read afresh through the system channel, as another process may change them.
+ * Tenancy's flags are read afresh through the system channel, as another process may change them —
+ * at most every few seconds, so a request asking many times reads them once.
  */
 final class Workspace
 {
-    public function __construct(private readonly ApplicationContext $context)
-    {
+    private const RECHECK_SECONDS = 5.0;
+
+    private ?bool $enforced = null;
+    private float $readAt = 0.0;
+
+    /**
+     * @param SystemChannel|null $flags the system channel; the container's when null
+     * @param (\Closure(): float)|null $clock seconds, monotonic; hrtime when null
+     */
+    public function __construct(
+        private readonly ApplicationContext $context,
+        private readonly ?SystemChannel $flags = null,
+        private readonly ?\Closure $clock = null,
+    ) {
     }
 
     public function enforcementActive(): bool
     {
-        $container = $this->context->getContainer();
-        if (!$container->has(SystemChannel::class)) {
-            return false;
+        $now = $this->clock !== null ? ($this->clock)() : hrtime(true) / 1e9;
+        if ($this->enforced !== null && $now - $this->readAt < self::RECHECK_SECONDS) {
+            return $this->enforced;
         }
-        $flags = $container->get(SystemChannel::class);
+        $this->readAt = $now;
+        return $this->enforced = $this->readEnforcement();
+    }
+
+    private function readEnforcement(): bool
+    {
+        $flags = $this->flags;
+        if ($flags === null) {
+            $container = $this->context->getContainer();
+            if (!$container->has(SystemChannel::class)) {
+                return false;
+            }
+            $flags = $container->get(SystemChannel::class);
+        }
         if (method_exists($flags, 'clearCache')) {
             $flags->clearCache();
         }
