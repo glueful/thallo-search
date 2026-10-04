@@ -130,6 +130,9 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             \Thallo\Search\Lifecycle\SearchDemand::class => [
                 'shared' => true, 'factory' => [self::class, 'makeSearchDemand'],
             ],
+            \Thallo\Search\Lifecycle\Cutover::class => [
+                'shared' => true, 'factory' => [self::class, 'makeCutover'],
+            ],
         ];
     }
 
@@ -294,6 +297,21 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             $container->get(\Thallo\Search\Lifecycle\Workspace::class),
             $container->get(\Thallo\Contracts\Settings\SystemChannel::class),
             $container->get(LoggerInterface::class),
+            static fn () => $container->get(\Thallo\Search\Lifecycle\Cutover::class)->flipIfReady(),
+            static fn () => $container->get(\Thallo\Search\Lifecycle\Cutover::class)->retireLegacyIndexIfUnused(),
+        );
+    }
+
+    public static function makeCutover(ContainerInterface $container): \Thallo\Search\Lifecycle\Cutover
+    {
+        return new \Thallo\Search\Lifecycle\Cutover(
+            $container->get(\Thallo\Search\Lifecycle\StateRepository::class),
+            $container->get(\Thallo\Search\Store\IndexStore::class),
+            $container->get(\Thallo\Search\Lifecycle\SearchIndexLocator::class),
+            $container->get(\Thallo\Search\Lifecycle\Workspace::class),
+            $container->get(\Thallo\Contracts\Settings\SystemChannel::class),
+            $container->get(Connection::class),
+            (string) config($container->get(ApplicationContext::class), 'search.index', 'content'),
         );
     }
 

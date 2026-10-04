@@ -40,9 +40,11 @@ final class StateRepository
         if ($row !== null) {
             return $row;
         }
+        // A kind added after the workspace cut over starts in v2, like every other kind of it.
+        $format = $this->db->table(self::STATE)->where('format', '=', 'v2')->count() > 0 ? 'v2' : 'legacy';
         try {
             $this->db->table(self::STATE)->insert([
-                'kind' => $kind, 'status' => 'pending', 'format' => 'legacy', 'updated_at' => $this->clock->now(),
+                'kind' => $kind, 'status' => 'pending', 'format' => $format, 'updated_at' => $this->clock->now(),
             ]);
         } catch (\Throwable $e) {
             // A concurrent ensure() won the unique index; its row is the row.
@@ -470,6 +472,25 @@ final class StateRepository
             $kind,
             ['last_error' => 'queue: ' . ErrorText::sanitize($error), 'updated_at' => $this->clock->now()],
         );
+    }
+
+    /**
+     * The cutover (search block spec §3.5.6): under the entries row lock, once entries are built and
+     * ready in v2, every kind row of the workspace moves to v2 in one statement.
+     */
+    public function flipToV2IfEntriesReady(string $entriesKind): bool
+    {
+        if ($this->row($entriesKind) === null) {
+            return false;
+        }
+        return (bool) $this->locked($entriesKind, function (array $row): bool {
+            $built = $row['status'] === 'ready' && (string) ($row['active_target'] ?? '') !== '';
+            if ($row['format'] === 'v2' || !$built) {
+                return false;
+            }
+            $this->db->table(self::STATE)->where('format', '=', 'legacy')->update(['format' => 'v2']);
+            return true;
+        });
     }
 
     /** Record why an entry failed; it stays unresolved and is retried. */
