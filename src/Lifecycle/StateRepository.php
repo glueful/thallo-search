@@ -303,15 +303,41 @@ final class StateRepository
      */
     public function unresolvedEntries(string $kind, ?int $afterSeq = null): array
     {
-        $rows = $this->db->table(self::CHANGES)->where('kind', '=', $kind)->orderBy('seq', 'ASC')->get();
         $entries = [];
-        foreach ($rows as $row) {
-            $resolved = (int) $row['resolved'] === 1;
-            if (!$resolved || ($afterSeq !== null && (int) $row['seq'] > $afterSeq)) {
-                $entries[] = new JournalEntry($kind, (string) $row['source_id'], (int) $row['seq'], $resolved);
-            }
+        foreach ($this->relevantChanges($kind, $afterSeq) as $row) {
+            $entries[] = new JournalEntry(
+                $kind,
+                (string) $row['source_id'],
+                (int) $row['seq'],
+                (int) $row['resolved'] === 1,
+            );
         }
         return $entries;
+    }
+
+    /**
+     * The journal rows a target still needs: every unresolved one, and with `$afterSeq` every one
+     * after it — read by the index, never the whole history. In seq order.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function relevantChanges(string $kind, ?int $afterSeq, ?int $upToSeq = null): array
+    {
+        $open = $this->db->table(self::CHANGES)->where('kind', '=', $kind)->where('resolved', '=', 0);
+        if ($upToSeq !== null) {
+            $open->where('seq', '<=', $upToSeq);
+        }
+        $rows = $open->get();
+        if ($afterSeq !== null) {
+            $later = $this->db->table(self::CHANGES)->where('kind', '=', $kind)->where('resolved', '=', 1)
+                ->where('seq', '>', $afterSeq);
+            if ($upToSeq !== null) {
+                $later->where('seq', '<=', $upToSeq);
+            }
+            $rows = array_merge($rows, $later->get());
+        }
+        usort($rows, static fn (array $a, array $b): int => (int) $a['seq'] <=> (int) $b['seq']);
+        return $rows;
     }
 
     /**
@@ -351,18 +377,10 @@ final class StateRepository
             $journalStartSeq,
         ): ?array {
             $head = (int) $row['journal_head'];
-            $relevant = [];
-            foreach (
-                $this->db->table(self::CHANGES)->where(
-                    'kind',
-                    '=',
-                    $builder->kind,
-                )->where('seq', '<=', $head)->get() as $change
-            ) {
-                if ((int) $change['resolved'] === 0 || (int) $change['seq'] > $journalStartSeq) {
-                    $relevant[] = (int) $change['seq'];
-                }
-            }
+            $relevant = array_map(
+                static fn (array $change): int => (int) $change['seq'],
+                $this->relevantChanges($builder->kind, $journalStartSeq, $head),
+            );
             $missing = array_values(array_diff($relevant, $this->ackedFor($builder->kind, $target->key(), $relevant)));
             if ($missing !== []) {
                 return $missing;
@@ -371,6 +389,13 @@ final class StateRepository
                 $this->db->table(self::CHANGES)->where('kind', '=', $builder->kind)->whereIn('seq', $relevant)
                     ->update(['resolved' => 1, 'failed_at' => null, 'error' => null]);
             }
+            // Resolved history at or below this build's start can never be relevant again: the next
+            // build starts at a later head. Pruned with its acknowledgements, so the journal stays
+            // bounded by the changes since the last promotion.
+            $this->db->table(self::CHANGES)->where('kind', '=', $builder->kind)->where('resolved', '=', 1)
+                ->where('seq', '<=', $journalStartSeq)->delete();
+            $this->db->table(self::ACKS)->where('kind', '=', $builder->kind)
+                ->where('entry_seq', '<=', $journalStartSeq)->delete();
             $failed = $this->db->table(self::CHANGES)->where('kind', '=', $builder->kind)->where('resolved', '=', 0)
                 ->whereNotNull('failed_at')->count();
             $this->update($builder->kind, [
