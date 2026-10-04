@@ -19,6 +19,8 @@ use Throwable;
  */
 final class LiveMeilisearchIndex implements MeilisearchIndex
 {
+    private const PAGE = 1000;
+
     public function __construct(private readonly IndexManager $manager)
     {
     }
@@ -73,13 +75,19 @@ final class LiveMeilisearchIndex implements MeilisearchIndex
         $full = $this->prefixed($prefix);
         $strip = strlen($this->prefixed(''));
         $names = [];
-        foreach ($this->client()->getIndexes((new IndexesQuery())->setLimit(1000))->getResults() as $index) {
-            $uid = $index->getUid();
-            if (is_string($uid) && str_starts_with($uid, $full)) {
-                $names[] = substr($uid, $strip);
+        // Every page: an install with many workspaces holds more indexes than one page returns.
+        for ($offset = 0;; $offset += self::PAGE) {
+            $page = $this->client()->getIndexes((new IndexesQuery())->setOffset($offset)->setLimit(self::PAGE));
+            foreach ($page->getResults() as $index) {
+                $uid = $index->getUid();
+                if (is_string($uid) && str_starts_with($uid, $full)) {
+                    $names[] = substr($uid, $strip);
+                }
+            }
+            if (count($page->getResults()) < self::PAGE || $offset + self::PAGE >= $page->getTotal()) {
+                return $names;
             }
         }
-        return $names;
     }
 
     public function federatedSearch(array $queries, int $limit, int $offset): array
