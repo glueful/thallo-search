@@ -28,15 +28,17 @@ final class SearchDemand
     /**
      * Records every kind's demand in one transaction (the caller's, when there is one), then queues
      * the wake-up after commit. `queued` is false when queueing failed — the demand stays recorded
-     * and the scheduled reconcile picks it up.
+     * and the scheduled reconcile picks it up — and null inside a caller's transaction, where the
+     * wake-up waits for that commit and its outcome is not known yet.
      *
      * @param string|null $kind one kind, or null for every available kind
-     * @return array{recorded: true, kinds: list<string>, queued: bool}
+     * @return array{recorded: true, kinds: list<string>, queued: ?bool}
      */
     public function request(?string $kind, string $reason): array
     {
         $kinds = $kind !== null ? [$kind] : array_keys($this->availability->available());
         $workspace = $this->workspace->current();
+        $deferred = $this->db->transactionLevel() > 0;
         $queued = true;
         $this->db->transaction(function () use ($kinds, $reason, $workspace, &$queued): void {
             foreach ($kinds as $one) {
@@ -53,6 +55,6 @@ final class SearchDemand
                 }
             });
         });
-        return ['recorded' => true, 'kinds' => $kinds, 'queued' => $queued];
+        return ['recorded' => true, 'kinds' => $kinds, 'queued' => $deferred ? null : $queued];
     }
 }
