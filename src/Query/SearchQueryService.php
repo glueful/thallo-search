@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Thallo\Search\Query;
 
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Thallo\Contracts\Search\KindFilter;
 use Thallo\Contracts\Search\SearchAudience;
 use Thallo\Contracts\Search\SearchSourceRegistry;
 use Thallo\Search\Engine\IndexNotFound;
+use Thallo\Search\Lifecycle\ErrorText;
 use Thallo\Search\Lifecycle\SearchIndexLocator;
 use Thallo\Search\Lifecycle\Workspace;
 use Thallo\Search\Store\IndexStore;
@@ -33,6 +36,7 @@ final class SearchQueryService
         private readonly SearchIndexLocator $locator,
         private readonly CursorSigner $cursors,
         private readonly Workspace $workspace,
+        private readonly LoggerInterface $logger = new NullLogger(),
     ) {
     }
 
@@ -49,6 +53,23 @@ final class SearchQueryService
         if ($input->scope->isUnavailable()) {
             return SearchOutcome::of(SearchOutcome::SCOPE_UNAVAILABLE, 'No longer provided by any installed feature');
         }
+        // Everything past here reads the index's state or the engine. Whatever breaks — an engine
+        // down, the lifecycle tables not yet migrated — answers "unavailable", and is logged.
+        try {
+            return $this->answer($input, $audience, $limit, $refill, $typeUuid);
+        } catch (\Throwable $e) {
+            $this->logger->warning('Search could not answer: ' . ErrorText::sanitize($e->getMessage()));
+            return SearchOutcome::of(SearchOutcome::UNAVAILABLE);
+        }
+    }
+
+    private function answer(
+        SearchInput $input,
+        SearchAudience $audience,
+        int $limit,
+        bool $refill,
+        ?string $typeUuid,
+    ): SearchOutcome {
         $kinds = $input->scope->isAll() ? array_keys($this->availability->available()) : [(string) $input->scope->kind];
         if (!$input->scope->isAll() && !$this->availability->isAvailable($kinds[0])) {
             $contributor = $this->sources->all()[$kinds[0]] ?? null;
@@ -88,11 +109,7 @@ final class SearchQueryService
             $start = $input->offset;
         }
 
-        try {
-            return $this->collect($input, $audience, $limit, $refill, $filters, $start, $binding);
-        } catch (\Throwable) {
-            return SearchOutcome::of(SearchOutcome::UNAVAILABLE);
-        }
+        return $this->collect($input, $audience, $limit, $refill, $filters, $start, $binding);
     }
 
     /** @param array<string, KindFilter> $filters */

@@ -193,6 +193,7 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             $container->get(\Thallo\Search\Lifecycle\SearchIndexLocator::class),
             $container->get(\Thallo\Search\Query\CursorSigner::class),
             $container->get(\Thallo\Search\Lifecycle\Workspace::class),
+            $container->get(LoggerInterface::class),
         );
     }
 
