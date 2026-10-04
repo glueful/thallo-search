@@ -41,9 +41,13 @@ final class StateRepository
             return $row;
         }
         try {
-            $this->db->table(self::STATE)->insert([
-                'kind' => $kind, 'status' => 'pending', 'updated_at' => $this->clock->now(),
-            ]);
+            // In its own (nested) transaction: inside a caller's transaction a failed insert rolls
+            // back to this savepoint only, so the re-read below still works on Postgres.
+            $this->db->transaction(function () use ($kind): void {
+                $this->db->table(self::STATE)->insert([
+                    'kind' => $kind, 'status' => 'pending', 'updated_at' => $this->clock->now(),
+                ]);
+            });
         } catch (\Throwable $e) {
             // A concurrent ensure() won the unique index; its row is the row.
             if ($this->row($kind) === null) {
