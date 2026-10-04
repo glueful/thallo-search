@@ -53,12 +53,20 @@ final class IndexRetirement
         }
         $this->state->keepRetired($kind, $kept);
 
-        $claimLive = $row['owner_token'] !== null && (string) $row['lease_until'] > $now;
+        // List first, then read the row: a build claims before it creates its index, so any build
+        // index the listing saw has a claim this fresh read sees.
+        $names = $this->store->listTargets($this->locator->targetPrefix($kind));
+        $row = $this->state->row($kind) ?? $row;
+        $claimLive = $row['owner_token'] !== null && (string) $row['lease_until'] > $this->state->now();
         if ($claimLive) {
             return; // a build is under way: its index may exist before it is recorded
         }
-        $protected = array_filter([(string) ($row['active_target'] ?? ''), ...$kept]);
-        foreach ($this->store->listTargets($this->locator->targetPrefix($kind)) as $name) {
+        $protected = array_filter([
+            (string) ($row['active_target'] ?? ''),
+            (string) ($row['building_target'] ?? ''),
+            ...$kept,
+        ]);
+        foreach ($names as $name) {
             if (!in_array($name, $protected, true)) {
                 $this->store->dropTarget(new Target(SearchIndexLocator::MEILISEARCH, $name, 0));
             }
