@@ -79,7 +79,12 @@ final class SearchAdminController
             );
         }
         $result = $this->requests->request($kind, 'manual');
-        $response = Response::success(['recorded' => true, 'kinds' => $result['kinds']], 'Rebuild requested.');
+        $response = Response::success(
+            ['recorded' => true, 'kinds' => $result['kinds'], 'queued' => $result['queued']],
+            $result['queued']
+                ? 'Rebuild requested.'
+                : 'Rebuild requested; it will start when background processing runs.',
+        );
         $response->setStatusCode(202);
         return $response;
     }

@@ -26,25 +26,33 @@ final class SearchDemand
     }
 
     /**
+     * Records every kind's demand in one transaction (the caller's, when there is one), then queues
+     * the wake-up after commit. `queued` is false when queueing failed — the demand stays recorded
+     * and the scheduled reconcile picks it up.
+     *
      * @param string|null $kind one kind, or null for every available kind
-     * @return array{recorded: true, kinds: list<string>}
+     * @return array{recorded: true, kinds: list<string>, queued: bool}
      */
     public function request(?string $kind, string $reason): array
     {
         $kinds = $kind !== null ? [$kind] : array_keys($this->availability->available());
-        foreach ($kinds as $one) {
-            $this->state->addDemand($one, $reason);
-        }
         $workspace = $this->workspace->current();
-        $this->db->afterCommit(function () use ($kinds, $workspace): void {
-            try {
-                ($this->push)(['workspace' => $workspace]);
-            } catch (\Throwable $e) {
-                foreach ($kinds as $one) {
-                    $this->state->noteQueueFailure($one, $e->getMessage());
-                }
+        $queued = true;
+        $this->db->transaction(function () use ($kinds, $reason, $workspace, &$queued): void {
+            foreach ($kinds as $one) {
+                $this->state->addDemand($one, $reason);
             }
+            $this->db->afterCommit(function () use ($kinds, $workspace, &$queued): void {
+                try {
+                    ($this->push)(['workspace' => $workspace]);
+                } catch (\Throwable $e) {
+                    $queued = false;
+                    foreach ($kinds as $one) {
+                        $this->state->noteQueueFailure($one, $e->getMessage());
+                    }
+                }
+            });
         });
-        return ['recorded' => true, 'kinds' => $kinds];
+        return ['recorded' => true, 'kinds' => $kinds, 'queued' => $queued];
     }
 }

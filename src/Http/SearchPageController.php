@@ -126,6 +126,8 @@ final class SearchPageController
             'site' => SiteContext::build($this->context, $locale),
             'current_path' => RenderPageCache::normalizePath($request->getPathInfo()),
             'presentation' => FramePresentation::fixed(null),
+            // The theme's seo_head() writes the robots tag (spec §3.7: never indexed).
+            'seo' => ['robots' => 'noindex', 'og' => ['type' => 'website']],
         ] + $extra));
 
         return new Response($html, $status, [
