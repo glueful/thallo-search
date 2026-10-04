@@ -23,7 +23,7 @@ final class RegistrySearchScopeStatus implements SearchScopeStatus
     public function stateOf(string $scope): array
     {
         if (!$this->availability->searchIsOn()) {
-            return ['available' => false, 'label' => 'Search', 'reason' => 'Search is off'];
+            return ['available' => false, 'label' => null, 'reason' => 'Search is off']; // no kind to name
         }
         if ($scope === '') {
             return ['available' => true, 'label' => 'All results', 'reason' => null];

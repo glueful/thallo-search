@@ -6,7 +6,7 @@
 {% set state = search_scope_state(scope) %}
 {% if not state.available %}
   {% if is_canvas() %}
-<div class="thallo-block thallo-block-search thallo-field-empty">{{ state.label|default('This') }} search isn't available: {{ state.reason }}.</div>
+<div class="thallo-block thallo-block-search thallo-field-empty">{% if state.label %}{{ state.label }} search{% else %}Search{% endif %} isn't available: {{ state.reason }}.</div>
   {% endif %}
 {% else %}
 {% set display = data.display|default('field') == 'icon' ? 'icon' : 'field' %}
