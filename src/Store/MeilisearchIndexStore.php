@@ -122,7 +122,6 @@ final class MeilisearchIndexStore implements IndexStore
         return new StoreResult($hits, $raw['estimatedTotalHits']);
     }
 
-
     public function createTarget(Target $target): void
     {
         $this->index->ensureIndex($target->name, [

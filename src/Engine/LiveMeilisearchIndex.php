@@ -7,6 +7,7 @@ namespace Thallo\Search\Engine;
 use Glueful\Extensions\Meilisearch\Indexing\IndexManager;
 use Meilisearch\Contracts\IndexesQuery;
 use Meilisearch\Contracts\MultiSearchFederation;
+use Meilisearch\Contracts\SearchQuery;
 use Meilisearch\Exceptions\ApiException;
 use Psr\Container\ContainerInterface;
 use Throwable;
@@ -83,12 +84,12 @@ final class LiveMeilisearchIndex implements MeilisearchIndex
 
     public function federatedSearch(array $queries, int $limit, int $offset): array
     {
-        $prefixed = array_map(fn (array $q): array => [
-            'indexUid' => $this->prefixed($q['indexUid']),
-            'q' => $q['q'],
-            'filter' => $q['filter'],
-            'showRankingScore' => true,
-        ], $queries);
+        // The client takes SearchQuery objects (it calls toArray() on each), never plain arrays.
+        $prefixed = array_map(fn (array $q): SearchQuery => (new SearchQuery())
+            ->setIndexUid($this->prefixed($q['indexUid']))
+            ->setQuery($q['q'])
+            ->setFilter([$q['filter']])
+            ->setShowRankingScore(true), $queries);
         try {
             $raw = $this->client()->multiSearch(
                 $prefixed,
