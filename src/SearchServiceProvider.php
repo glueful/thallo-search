@@ -481,6 +481,14 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
     private function registerBlockType(ApplicationContext $context): void
     {
         $container = $context->getContainer();
+        if ($container->has(\Thallo\Contracts\Fields\FieldOptionSourceRegistry::class)) {
+            $container->get(\Thallo\Contracts\Fields\FieldOptionSourceRegistry::class)->register(
+                new \Thallo\Search\Sources\SearchScopesOptionSource(
+                    $container->get(SearchSourceRegistry::class),
+                    $container->get(\Thallo\Search\Query\KindAvailability::class),
+                ),
+            );
+        }
         if ($container->has(\Thallo\Contracts\Starter\StarterBlockTypeRegistry::class)) {
             $container->get(\Thallo\Contracts\Starter\StarterBlockTypeRegistry::class)
                 ->register(new \Thallo\Search\Starter\SearchBlockTypeContributor());
