@@ -116,6 +116,16 @@ final class DocumentBuilder
     }
 
     /**
+     * The words a reader sees, as the index holds them — what results are shown from, so the index
+     * and the display agree on what an entry says.
+     */
+    public function text(IndexableContent $content, ContentSchemaReader $schema): string
+    {
+        $document = $this->build($content, $schema);
+        return trim($document['title'] . "\n\n" . $document['body']);
+    }
+
+    /**
      * The type slugs with per-type config — the single source for `search:status`'s
      * validation sweep (never re-read the config tree this builder was constructed from).
      *

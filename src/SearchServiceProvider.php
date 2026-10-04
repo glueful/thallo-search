@@ -91,6 +91,9 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             SearchContentReindexer::class => [
                 'class' => SearchContentReindexer::class, 'shared' => true, 'autowire' => true,
             ],
+            \Thallo\Search\Index\LegacyEntryIndexer::class => [
+                'class' => \Thallo\Search\Index\LegacyEntryIndexer::class, 'shared' => true, 'autowire' => true,
+            ],
             ContentReindexer::class => [
                 'shared' => true, 'factory' => [self::class, 'makeContentReindexer'],
             ],
@@ -266,6 +269,17 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
 
     public function boot(ApplicationContext $context): void
     {
+        // Every kind's metadata is discoverable whether or not search is on (search block spec §3.2):
+        // availability is decided from capabilities, never from whether a contributor registered.
+        $container = $context->getContainer();
+        if ($container->has(SearchSourceRegistry::class)) {
+            $container->get(SearchSourceRegistry::class)->register(new \Thallo\Search\Sources\EntriesContributor(
+                $container->get(\Thallo\Contracts\Search\IndexableContentReader::class),
+                $container->get(DocumentBuilder::class),
+                $container->get(ContentTypeReader::class),
+                $container->get(VisibilityResolver::class),
+            ));
+        }
 
         if (self::enabled($context)) {
             $this->loadRoutesFrom(__DIR__ . '/../routes/public-routes.php');
