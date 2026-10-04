@@ -378,13 +378,16 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
         );
     }
 
-    /** Queues a SearchWakeJob for a workspace: `['workspace' => ?string]`. */
+    /**
+     * Queues a SearchWakeJob for a workspace: `['workspace' => ?string]`. On `default`, which every
+     * documented worker takes; the demand is durable either way, the job is only an early start.
+     */
     public static function wake(ApplicationContext $context): \Closure
     {
         return static function (array $data) use ($context): void {
             \Glueful\Queue\QueueManager::setContext($context);
             \Glueful\Queue\QueueManager::createDefault()
-                ->push(\Thallo\Search\Lifecycle\SearchWakeJob::class, $data, 'search');
+                ->push(\Thallo\Search\Lifecycle\SearchWakeJob::class, $data, 'default');
         };
     }
 
