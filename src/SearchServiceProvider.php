@@ -103,6 +103,15 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             SearchController::class => [
                 'shared' => true, 'factory' => [self::class, 'makeSearchController'],
             ],
+            \Thallo\Search\Query\CursorSigner::class => [
+                'shared' => true, 'factory' => [self::class, 'makeCursorSigner'],
+            ],
+            \Thallo\Search\Query\SearchQueryService::class => [
+                'shared' => true, 'factory' => [self::class, 'makeQueryService'],
+            ],
+            \Thallo\Search\Http\SuggestController::class => [
+                'class' => \Thallo\Search\Http\SuggestController::class, 'shared' => true, 'autowire' => true,
+            ],
             ReindexCommand::class => [
                 'shared' => true, 'factory' => [self::class, 'makeReindexCommand'],
             ],
@@ -140,11 +149,43 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
     {
         $context = $container->get(ApplicationContext::class);
         return new SearchController(
-            $container->get(SearchBackend::class),
+            $container->get(\Thallo\Search\Query\SearchQueryService::class),
+            $container->get(SearchSourceRegistry::class),
             $container->get(VisibilityResolver::class),
             $container->get(ContentTypeReader::class),
+            $container->get(\Thallo\Contracts\Context\Context::class),
+            $container->get(\Thallo\Search\Query\CursorSigner::class),
+            $container->get(\Thallo\Search\Lifecycle\Workspace::class),
             (int) config($context, 'search.default_limit', 20),
             (int) config($context, 'search.max_limit', 50),
+        );
+    }
+
+    /** Cursors are signed with the app key, under their own domain (search block spec §3.4). */
+    public static function makeCursorSigner(ContainerInterface $container): \Thallo\Search\Query\CursorSigner
+    {
+        $key = (string) config($container->get(ApplicationContext::class), 'app.key', '');
+        if ($key === '') {
+            throw new \RuntimeException('APP_KEY is not configured; search cursors cannot be signed.');
+        }
+        if (str_starts_with($key, 'base64:')) {
+            $decoded = base64_decode(substr($key, 7), true);
+            if ($decoded !== false) {
+                $key = $decoded;
+            }
+        }
+        return new \Thallo\Search\Query\CursorSigner(hash_hmac('sha256', 'search-cursor', $key, true));
+    }
+
+    public static function makeQueryService(ContainerInterface $container): \Thallo\Search\Query\SearchQueryService
+    {
+        return new \Thallo\Search\Query\SearchQueryService(
+            $container->get(SearchSourceRegistry::class),
+            $container->get(\Thallo\Search\Query\KindAvailability::class),
+            $container->get(\Thallo\Search\Store\IndexStore::class),
+            $container->get(\Thallo\Search\Lifecycle\SearchIndexLocator::class),
+            $container->get(\Thallo\Search\Query\CursorSigner::class),
+            $container->get(\Thallo\Search\Lifecycle\Workspace::class),
         );
     }
 
