@@ -5,76 +5,154 @@ declare(strict_types=1);
 namespace Thallo\Search\Engine;
 
 use Glueful\Extensions\Meilisearch\Indexing\IndexManager;
-use Meilisearch\Endpoints\Indexes;
+use Meilisearch\Contracts\IndexesQuery;
+use Meilisearch\Contracts\MultiSearchFederation;
+use Meilisearch\Exceptions\ApiException;
 use Psr\Container\ContainerInterface;
 use Throwable;
 
 /**
- * The ONLY class in this pack that imports Glueful\Extensions\Meilisearch\*. Wraps the
- * extension's IndexManager (lifecycle/settings/stats) and the raw index endpoint
- * (documents + search) for the pack-owned MeilisearchIndex seam.
+ * The only class in this pack that imports Glueful\Extensions\Meilisearch\* (and the Meilisearch
+ * client beneath it). Names arrive unprefixed and leave prefixed by the extension's configured
+ * prefix; document writes return their task uid and never wait.
  */
 final class LiveMeilisearchIndex implements MeilisearchIndex
 {
-    private ?Indexes $handle = null;
-
-    public function __construct(
-        private readonly IndexManager $manager,
-        private readonly string $indexName,
-    ) {
-    }
-
-    public static function fromContainer(ContainerInterface $container, string $indexName): self
+    public function __construct(private readonly IndexManager $manager)
     {
-        return new self($container->get(IndexManager::class), $indexName);
     }
 
-    public function ensureIndex(array $settings): void
+    public static function fromContainer(ContainerInterface $container): self
     {
-        $this->handle = $this->manager->getOrCreateIndex($this->indexName);
-        $this->manager->updateSettings($this->indexName, $settings);
+        return new self($container->get(IndexManager::class));
     }
 
-    public function addDocuments(array $documents): void
+    public function serverVersion(): string
     {
-        // 'id' is the Meilisearch primary key by convention (see IndexManager::createIndex).
-        $this->index()->addDocuments($documents, 'id');
+        return (string) ($this->manager->getClient()->version()['pkgVersion'] ?? '0.0.0');
     }
 
-    public function deleteDocument(string $id): void
+    public function ensureIndex(string $uid, array $settings): void
     {
-        $this->index()->deleteDocument($id);
+        $this->manager->getOrCreateIndex($uid);
+        $this->manager->updateSettings($uid, $settings);
     }
 
-    public function deleteByFilter(string $filter): void
+    public function addDocuments(string $uid, array $documents): int
     {
-        // meilisearch-php: filtered delete via deleteDocuments(['filter' => …]).
-        $this->index()->deleteDocuments(['filter' => $filter]);
+        return (int) $this->index($uid)->addDocuments($documents, 'id')['taskUid'];
     }
 
-    public function rawSearch(string $query, array $params): array
+    public function deleteDocuments(string $uid, array $ids): int
     {
-        // rawSearch returns the direct Meilisearch response array (hits with _formatted /
-        // _rankingScore, estimatedTotalHits) — no SearchResult wrapper.
-        return $this->index()->rawSearch($query, $params);
+        return (int) $this->index($uid)->deleteDocuments($ids)['taskUid'];
     }
 
-    /**
-     * Memoized index handle: getOrCreateIndex() re-validates existence/primary key with an
-     * HTTP GET on every call, which would double the Meilisearch traffic of each operation.
-     */
-    private function index(): Indexes
+    public function deleteByFilter(string $uid, string $filter): int
     {
-        return $this->handle ??= $this->manager->getOrCreateIndex($this->indexName);
+        return (int) $this->index($uid)->deleteDocuments(['filter' => $filter])['taskUid'];
     }
 
-    public function reachable(): bool
+    public function deleteIndex(string $uid): int
+    {
+        return (int) $this->client()->deleteIndex($this->prefixed($uid))['taskUid'];
+    }
+
+    public function task(int $taskUid): array
+    {
+        $task = $this->client()->getTask($taskUid);
+        return [
+            'status' => (string) ($task['status'] ?? 'enqueued'),
+            'error' => isset($task['error']['message']) ? (string) $task['error']['message'] : null,
+        ];
+    }
+
+    public function listIndexes(string $prefix): array
+    {
+        $full = $this->prefixed($prefix);
+        $strip = strlen($this->prefixed(''));
+        $names = [];
+        foreach ($this->client()->getIndexes((new IndexesQuery())->setLimit(1000))->getResults() as $index) {
+            $uid = $index->getUid();
+            if (is_string($uid) && str_starts_with($uid, $full)) {
+                $names[] = substr($uid, $strip);
+            }
+        }
+        return $names;
+    }
+
+    public function federatedSearch(array $queries, int $limit, int $offset): array
+    {
+        $prefixed = array_map(fn (array $q): array => [
+            'indexUid' => $this->prefixed($q['indexUid']),
+            'q' => $q['q'],
+            'filter' => $q['filter'],
+            'showRankingScore' => true,
+        ], $queries);
+        try {
+            $raw = $this->client()->multiSearch(
+                $prefixed,
+                (new MultiSearchFederation())->setLimit($limit)->setOffset($offset),
+            );
+        } catch (ApiException $e) {
+            throw $this->notFound($e, $queries) ?? $e;
+        }
+        $strip = strlen($this->prefixed(''));
+        $hits = [];
+        foreach ((array) ($raw['hits'] ?? []) as $hit) {
+            $federation = (array) ($hit['_federation'] ?? []);
+            $hit['_index'] = substr((string) ($federation['indexUid'] ?? ''), $strip);
+            $hit['_score'] = (float) ($federation['weightedRankingScore'] ?? $hit['_rankingScore'] ?? 0.0);
+            $hits[] = $hit;
+        }
+        return ['hits' => $hits, 'estimatedTotalHits' => (int) ($raw['estimatedTotalHits'] ?? count($hits))];
+    }
+
+    public function rawSearch(string $uid, string $query, array $params): array
     {
         try {
-            $this->manager->getStats($this->indexName);
+            return $this->index($uid)->rawSearch($query, $params);
+        } catch (ApiException $e) {
+            throw $this->notFound($e, [['indexUid' => $uid]]) ?? $e;
+        }
+    }
+
+    public function reachable(string $uid): bool
+    {
+        try {
+            $this->manager->getStats($uid);
             return true;
         } catch (Throwable) {
             return false;
         }
+    }
+
+    private function index(string $uid): \Meilisearch\Endpoints\Indexes
+    {
+        return $this->client()->index($this->prefixed($uid));
+    }
+
+    private function client(): \Glueful\Extensions\Meilisearch\Client\MeilisearchClient
+    {
+        return $this->manager->getClient();
+    }
+
+    private function prefixed(string $uid): string
+    {
+        return $this->client()->prefixedIndexName($uid);
+    }
+
+    /** @param list<array{indexUid: string}> $queries */
+    private function notFound(ApiException $e, array $queries): ?IndexNotFound
+    {
+        if ($e->errorCode !== 'index_not_found') {
+            return null;
+        }
+        foreach ($queries as $query) {
+            if (str_contains((string) $e->getMessage(), $this->prefixed($query['indexUid']))) {
+                return new IndexNotFound($query['indexUid']);
+            }
+        }
+        return new IndexNotFound($queries[0]['indexUid'] ?? '');
     }
 }

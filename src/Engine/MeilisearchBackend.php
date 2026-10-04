@@ -24,9 +24,11 @@ final class MeilisearchBackend implements SearchBackend
     // entry_uuid is filterable so whole-entry purges (deleteByFilter) are valid in Meilisearch.
     private const FILTERABLE = ['content_type_uuid', 'content_type_slug', 'locale', 'entry_uuid'];
 
+    /** @param string $uid the legacy shared index, unprefixed (config `search.index`) */
     public function __construct(
         private readonly MeilisearchIndex $index,
         private readonly int $snippetLength,
+        private readonly string $uid = 'content',
     ) {
     }
 
@@ -37,7 +39,7 @@ final class MeilisearchBackend implements SearchBackend
 
     public function ensureIndex(): void
     {
-        $this->index->ensureIndex([
+        $this->index->ensureIndex($this->uid, [
             'searchableAttributes' => self::SEARCHABLE,
             'filterableAttributes' => self::FILTERABLE,
         ]);
@@ -49,16 +51,16 @@ final class MeilisearchBackend implements SearchBackend
         if ($docs === []) {
             return;
         }
-        $this->index->addDocuments($docs);
+        $this->index->addDocuments($this->uid, $docs);
     }
 
     public function deleteEntry(string $entryUuid, ?string $locale = null): void
     {
         if ($locale !== null) {
-            $this->index->deleteDocument(DocumentBuilder::documentId($entryUuid, $locale));
+            $this->index->deleteDocuments($this->uid, [DocumentBuilder::documentId($entryUuid, $locale)]);
             return;
         }
-        $this->index->deleteByFilter('entry_uuid = ' . $this->quote($entryUuid));
+        $this->index->deleteByFilter($this->uid, 'entry_uuid = ' . $this->quote($entryUuid));
     }
 
     public function search(SearchRequest $request): SearchResults
@@ -83,7 +85,7 @@ final class MeilisearchBackend implements SearchBackend
             'showRankingScore' => true,
         ];
 
-        $raw = $this->index->rawSearch($request->q, $params);
+        $raw = $this->index->rawSearch($this->uid, $request->q, $params);
 
         $hits = [];
         foreach ((array) ($raw['hits'] ?? []) as $row) {
@@ -109,7 +111,7 @@ final class MeilisearchBackend implements SearchBackend
 
     public function health(): bool
     {
-        return $this->index->reachable();
+        return $this->index->reachable($this->uid);
     }
 
     private function buildFilter(SearchRequest $request): string

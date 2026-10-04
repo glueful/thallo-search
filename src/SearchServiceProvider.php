@@ -116,8 +116,9 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
         return match ($engine) {
             SearchEngineChoice::POSTGRES => new PostgresFtsBackend($db, $snippetLength),
             SearchEngineChoice::MEILISEARCH => new MeilisearchBackend(
-                LiveMeilisearchIndex::fromContainer($container, (string) config($context, 'search.index', 'content')),
+                LiveMeilisearchIndex::fromContainer($container),
                 $snippetLength,
+                (string) config($context, 'search.index', 'content'),
             ),
             default => new UnavailableSearchBackend((string) $why),
         };
