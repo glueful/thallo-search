@@ -73,7 +73,10 @@ final class SearchQueryService
             $filters[$kind] = $filter;
         }
         if ($filters === []) {
-            return SearchOutcome::of(SearchOutcome::REBUILDING);
+            // Nothing built yet: an engine that cannot answer is the reason, not the build.
+            return SearchOutcome::of(
+                $this->store->readiness()->available ? SearchOutcome::REBUILDING : SearchOutcome::UNAVAILABLE,
+            );
         }
 
         $binding = CursorBinding::of($input, $this->workspace->current() ?? '', $audience);

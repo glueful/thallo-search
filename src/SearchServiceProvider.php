@@ -362,6 +362,7 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             $container->get(\Thallo\Search\Lifecycle\Workspace::class),
             $container->get(\Thallo\Contracts\Settings\SystemChannel::class),
             $container->get(LoggerInterface::class),
+            self::wake($container->get(ApplicationContext::class)),
         );
     }
 
@@ -373,12 +374,18 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             $container->get(\Thallo\Search\Query\KindAvailability::class),
             $container->get(Connection::class),
             $container->get(\Thallo\Search\Lifecycle\Workspace::class),
-            static function (array $data) use ($context): void {
-                \Glueful\Queue\QueueManager::setContext($context);
-                \Glueful\Queue\QueueManager::createDefault()
-                    ->push(\Thallo\Search\Lifecycle\SearchWakeJob::class, $data, 'search');
-            },
+            self::wake($context),
         );
+    }
+
+    /** Queues a SearchWakeJob for a workspace: `['workspace' => ?string]`. */
+    public static function wake(ApplicationContext $context): \Closure
+    {
+        return static function (array $data) use ($context): void {
+            \Glueful\Queue\QueueManager::setContext($context);
+            \Glueful\Queue\QueueManager::createDefault()
+                ->push(\Thallo\Search\Lifecycle\SearchWakeJob::class, $data, 'search');
+        };
     }
 
     public static function makeReindexCommand(ContainerInterface $container): ReindexCommand

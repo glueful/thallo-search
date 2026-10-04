@@ -31,6 +31,8 @@ final class Reconciler
         private readonly Workspace $workspace,
         private readonly SystemChannel $flags,
         private readonly LoggerInterface $logger,
+        /** Queues a wake-up for a workspace (search block spec §3.5.7): `['workspace' => ?string]`. */
+        private readonly ?\Closure $wake = null,
     ) {
     }
 
@@ -60,9 +62,14 @@ final class Reconciler
         return $outcome;
     }
 
-    /** Every workspace, each inside its own context. */
+    /** Every workspace, each inside its own context — after noting any change in availability. */
     public function runAll(bool $full): void
     {
+        try {
+            $this->noteAvailabilityChange();
+        } catch (\Throwable $e) {
+            $this->logger->warning('Search availability check failed: ' . ErrorText::sanitize($e->getMessage()));
+        }
         $this->workspace->each(function () use ($full): void {
             try {
                 $this->runWorkspace($full);
@@ -74,11 +81,31 @@ final class Reconciler
     }
 
     /**
-     * Boot recovery: a change in which kinds are available — including one made only in
-     * configuration, with no switch written — becomes capability demand in every workspace; then
-     * any workspace with outstanding demand is reconciled.
+     * Boot recovery: note any change in availability, then queue a wake-up for every workspace with
+     * outstanding demand. It never rebuilds in the request that booted; the queue worker or the
+     * scheduled `search:reconcile` does the work.
      */
     public function recoverIfDue(): void
+    {
+        $this->noteAvailabilityChange();
+        if ($this->wake === null) {
+            return;
+        }
+        $this->workspace->each(function (?string $workspace): void {
+            foreach (array_keys($this->availability->available()) as $kind) {
+                if ($this->demand->pending($kind) !== null) {
+                    ($this->wake)(['workspace' => $workspace]);
+                    return;
+                }
+            }
+        });
+    }
+
+    /**
+     * A change in which kinds are available — including one made only in configuration, with no
+     * switch written — becomes capability demand in every workspace.
+     */
+    private function noteAvailabilityChange(): void
     {
         if (method_exists($this->flags, 'clearCache')) {
             $this->flags->clearCache();
@@ -87,26 +114,17 @@ final class Reconciler
         sort($available);
         $marker = json_encode($available, JSON_THROW_ON_ERROR);
         $last = $this->flags->get(self::AVAILABILITY_MARKER);
-        if ($last !== $marker) {
-            $previous = is_string($last) ? (array) json_decode($last, true) : [];
-            $newly = array_values(array_diff($available, $previous));
-            if ($last === null) {
-                $newly = []; // first sight: new-workspace demand covers the first build
-            }
-            $this->workspace->each(function () use ($newly): void {
-                foreach ($newly as $kind) {
-                    $this->state->addDemand($kind, 'capability');
-                }
-            });
-            $this->flags->put(self::AVAILABILITY_MARKER, $marker);
+        if ($last === $marker) {
+            return;
         }
-        $this->workspace->each(function (): void {
-            foreach (array_keys($this->availability->available()) as $kind) {
-                if ($this->demand->pending($kind) !== null) {
-                    $this->runWorkspace(false);
-                    return;
-                }
+        $previous = is_string($last) ? (array) json_decode($last, true) : [];
+        // First sight: new-workspace demand already covers the first build.
+        $newly = $last === null ? [] : array_values(array_diff($available, $previous));
+        $this->workspace->each(function () use ($newly): void {
+            foreach ($newly as $kind) {
+                $this->state->addDemand($kind, 'capability');
             }
         });
+        $this->flags->put(self::AVAILABILITY_MARKER, $marker);
     }
 }
