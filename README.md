@@ -1,7 +1,9 @@
 # thallo-search
 
-Public, delivery-parity **content search** for [Thallo](https://thallo.dev) — shipped as a
-capability pack, with two engines behind one port:
+Public, delivery-parity **search** for [Thallo](https://thallo.dev) — shipped as a capability
+pack: a **Search block** (a field, or an icon that opens one, header-ready), a `/search` results
+page, `GET /v1/search`, and **Settings › Search** in the admin. Packs contribute kinds of result
+(entries ship here; Commerce adds products) through `SearchSourceContributor`. Two engines:
 
 - **PostgreSQL full-text search** — the database your site already has. Nothing to install,
   nothing to run. Stemming in the page's language, prefix matching for a search-as-you-type
@@ -9,23 +11,24 @@ capability pack, with two engines behind one port:
 - **[Meilisearch](https://www.meilisearch.com/)** — for a site that wants typo tolerance and
   runs the server; the `glueful/meilisearch` extension owns the mechanics.
 
-thallo-search owns Thallo semantics (published-only visibility, `href`/`title`, lifecycle sync,
-the `ContentReindexer` seam). Everything but the engines depends only on the `SearchBackend`
-port.
+thallo-search owns the index: identity, workspace isolation, the build lifecycle, and one query
+path every surface shares. What a result shows is always read from current records by its
+contributor's `present()`, never from the index. The contracts are documented in the
+[Thallo docs](https://thallo.dev/docs) under Reference › Search sources.
 
 ## Turn it on
 
 Search ships **off** (core's `thallo.capabilities` config map sets `'thallo.search' => false`).
-Turn it on in the admin under **Settings › General › Content search** or **Extensions › Capabilities**; both write the same system-wide switch, which overrides the config default. Then
-index what is already published:
+Turn it on in the admin under **Settings › General › Content search** or **Extensions › Capabilities**; both write the same system-wide switch, which overrides the config default.
+Switching it on requests a build, which the scheduler picks up within a minute; from then on
+every save reaches the index on its own. Watch it in **Settings › Search**, or:
 
 ```bash
-php glueful search:reindex
-php glueful search:status     # which engine answers, and whether it can
+php glueful search:status     # the engine, and each kind's index
 ```
 
-From then on publishing, updating, unpublishing and deleting keep the index in step. While the
-capability is off, `/v1/search` is not registered (404) and the reindexer is a no-op.
+Indexing needs the queue worker and the scheduler running. While the capability is off,
+`/v1/search` is not registered (404), `/search` is the theme's 404, and changes are not recorded.
 
 ## Which engine
 
@@ -40,10 +43,10 @@ capability is off, `/v1/search` is not registered (404) and the reindexer is a n
 A choice that cannot be honoured is never quietly swapped for the other engine — indexing a site
 into a second engine behind its operator's back is how a search goes stale unnoticed. Search is
 then **unavailable**: the endpoint answers 503, publishing is never affected, and
-`search:status` says why. After changing engines, run `search:reindex`.
+`search:status` says why. After changing engines, rebuild every kind.
 
-The PostgreSQL engine keeps its index in the `search_documents` table (the pack's one migration;
-`php glueful thallo:provision` creates it). Postgres maintains the search vector itself, as a
+The PostgreSQL engine keeps its index in the `search_documents` table (`php glueful
+thallo:provision` creates it). Postgres maintains the search vector itself, as a
 generated column: each text in the page's language, where words meet by their stem, and as
 written, where a typed prefix can match. A locale maps to a text-search configuration by its
 language (`fr-CA` → `french`); a language Postgres has none for uses `simple`, which matches
@@ -54,11 +57,22 @@ every other content table.
 by its stem or as a prefix, so more words narrow a search. No operator a visitor types reaches
 the query parser. A single letter is a word, not the start of every word beginning with it.
 
+Meilisearch needs **server 1.10 or newer**. Each workspace and kind gets its own index, one per
+build attempt (`{SEARCH_INDEX}_v2_[{workspace}_]{kind}_g{n}`); a replaced index is deleted after
+`retire_grace`.
+
 ## Endpoint
 
 ```
-GET /v1/search?q=<terms>&locale=<code>[&type=<slug>][&limit=<n>][&offset=<n>]
+GET /v1/search?q=<terms>&locale=<code>[&kind=<kind>][&type=<slug>][&limit=<n>][&offset=<n>|&cursor=<c>]
 ```
+
+`kind` omitted is entries only (the endpoint's original behaviour); `all` searches every
+available kind; `products` (with Commerce) searches products. `type` narrows entries and cannot
+be combined with another `kind`. `cursor` is the opt-in continuation: pass the previous
+response's `next`; a cursor page is refilled when results are dropped as not visible, while
+`offset` keeps fixed windows. A cursor is signed and bound to the query, the caller and the
+workspace.
 
 Behind `optional_api_key`: an authenticated key narrows visibility to its scopes; an anonymous
 request sees only content types with `public_delivery = true`. Visibility is enforced **inside**
@@ -74,6 +88,7 @@ envelope:
   "data": {
     "hits": [
       {
+        "kind": "entries",
         "uuid": "e-1",
         "type": "blog",
         "locale": "en",
@@ -84,8 +99,10 @@ envelope:
       }
     ],
     "total": 42,
+    "total_approximate": false,
     "limit": 20,
-    "offset": 0
+    "offset": 0,
+    "next": null
   }
 }
 ```
@@ -100,8 +117,13 @@ envelope:
     excluded.
   - `type` provided but **inaccessible** → **403**. Unknown `type` → **404**. Accessible `type`
     → results filtered to it.
-- **Status codes:** empty `q` → 422; missing `locale` → 422; unknown `type` → 404; inaccessible
-  `type` → 403; backend unhealthy → 503. `limit` is clamped to `[1, max_limit]`; `offset` ≥ 0.
+- **Other kinds:** a non-entry hit carries `source_id` instead of `uuid`/`type`, plus `image` and
+  `price` when its contributor provides them. `total_approximate` is true when `total` is an
+  estimate.
+- **Status codes:** empty `q`, missing or unknown `locale`, unknown `kind`, `offset` with `cursor`,
+  `type` with a non-entries `kind`, or an unavailable kind → 422; a `cursor` not valid for the
+  query → 400; unknown `type` → 404; inaccessible `type` → 403; engine unavailable or an index
+  still being built for the first time → 503. `limit` is clamped to `[1, max_limit]`; `offset` ≥ 0.
 
 ## Configuration (`config/search.php`)
 
@@ -109,8 +131,18 @@ envelope:
 | --- | --- | --- |
 | `engine` | `auto` | `SEARCH_ENGINE`: `auto`, `postgres` or `meilisearch` (above). |
 | `meilisearch_configured` | from env | True when `MEILISEARCH_HOST` is set and non-empty; drives `auto`. |
-| `index` | `content` | `SEARCH_INDEX`: Meilisearch index name (one shared content index). |
+| `index` | `content` | `SEARCH_INDEX`: the prefix of every Meilisearch index name. |
 | `snippet_length` | `40` | `SEARCH_SNIPPET_LENGTH`: highlighted-body crop length, in words. |
+| `page_size` | `10` | `SEARCH_PAGE_SIZE`: results per `/search` page. |
+| `page_rate_limit` | `60` | `SEARCH_PAGE_RATE_LIMIT`: `/search` searches per client per minute. |
+| `build_lease` | `120` | `SEARCH_BUILD_LEASE`: seconds a build's claim lasts before renewal. |
+| `drainer_lease` | `60` | `SEARCH_DRAINER_LEASE`: the same, for applying live changes. |
+| `request_timeout` | `10` | `SEARCH_REQUEST_TIMEOUT`: seconds one engine request may take. |
+| `lease_margin` | `5` | `SEARCH_LEASE_MARGIN`: seconds before a claim ends in which nothing more is sent. |
+| `meilisearch_task_timeout` | `10` | `SEARCH_MEILISEARCH_TASK_TIMEOUT`: seconds a Meilisearch task is awaited. |
+| `build_batch` | `200` | `SEARCH_BUILD_BATCH`: documents per rebuild batch. |
+| `retire_grace` | `120` | `SEARCH_RETIRE_GRACE`: seconds a replaced Meilisearch index is kept. |
+| `stall_after` | `600` | `SEARCH_STALL_AFTER`: seconds a request may wait unclaimed before Settings › Search flags it. |
 | `default_limit` | `20` | Page size when `limit` is omitted. |
 | `max_limit` | `50` | Upper bound for `limit`. |
 | `types.<slug>` | — | Optional per-type field selection (see below). |
@@ -139,9 +171,12 @@ Unknown or non-string configured fields are skipped at runtime and reported by `
 ## Commands
 
 ```bash
-php glueful search:reindex [--type=<slug>] [--locale=<code>]   # backfill the index from published content
-php glueful search:status                                       # doctor: backend health + config warnings
+php glueful search:reindex [--kind=<kind>] [--wait]   # request a rebuild; --wait runs it now
+php glueful search:reconcile [--full]                 # the scheduled worker (every minute; --full daily)
+php glueful search:status [--all]                     # engine readiness and each kind's index
 ```
+
+`search:reindex --type`/`--locale` are removed: they exit non-zero without touching the index.
 
 **Real-server smoke test:** the unit suite fakes the Meilisearch seam, so Meilisearch's
 actual contract (document-id charset, filterable attributes, delete-by-filter) is only
@@ -155,16 +190,23 @@ type's `public_delivery` flag takes effect in search immediately — no reindex 
 
 ## Lifecycle
 
-Publish/unpublish/update/delete events flow through Thallo's existing `ContentReindexer` seam
-(identity-only). A per-locale event re-reads and upserts (or deletes that locale's doc); a
-whole-entry delete (`locale = null`) purges every locale doc. Reindexing runs in the pipeline's
-after-commit and is wrapped so a search-backend failure is logged, never breaking the publish —
-`search:reindex` recovers.
+Each workspace and kind has a state row. A change (an entry's publish, `SearchIndex::changed()`
+from a pack) is appended to a journal under that row's lock after the source's own transaction
+commits, and a queued wake-up drains it to every live target, acknowledging per target. A rebuild
+claims the kind with a lease and a fresh generation, writes a new target from `enumerate()`, and
+is promoted only once every journal entry is acknowledged on it; fences keep a builder, a drainer
+and a superseded attempt from writing over each other. Rebuild requests are durable: the
+scheduled `search:reconcile` picks them up every minute, and `--full` once a day rebuilds every
+kind, repairing any change lost between a commit and its event. A failure is recorded on the row
+(**Settings › Search** shows it) and never breaks the save. Sites upgrading from the single
+`content` index keep reading it until the new entries index is ready, except where workspaces
+are enforced on Meilisearch, which show rebuilding until their own index is ready.
 
 ## Scope
 
-Content search only. **Not** here: collections-row search, an admin search UI, typo tolerance
-on the PostgreSQL engine, and any search-permission migration.
+Public search of published content and pack-contributed kinds. **Not** here: collections-row
+search, searching the admin's own lists, typo tolerance on the PostgreSQL engine, and any
+search-permission migration.
 
 ## Contributing
 
