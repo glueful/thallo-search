@@ -20,3 +20,8 @@ $router->get('/_search/suggest', [SuggestController::class, 'suggest'])
     ->middleware(['tenant_profile:public', 'tenant_bootstrap'])
     ->middleware('rate_limit')
     ->rateLimit(120, 1, by: 'ip');
+
+// The Search block's script and stylesheet, fingerprinted. Under /_thallo/ because hosts' static
+// rules hand only /_thallo/* .js/.css URLs to PHP.
+$router->get('/_thallo/search/{file}', [\Thallo\Search\Assets\SearchAssetController::class, 'serve'])
+    ->middleware(['tenant_profile:public', 'tenant_bootstrap']);

@@ -51,6 +51,19 @@ final class KindAvailability
         return $missing === null ? null : 'Requires ' . ($this->labelOf)($missing);
     }
 
+    public function searchIsOn(): bool
+    {
+        return ($this->isEnabled)('thallo.search');
+    }
+
+    /** The label of the first capability a registered kind is missing ("Commerce"), or null. */
+    public function missingLabel(string $kind): ?string
+    {
+        $contributor = $this->sources->all()[$kind] ?? null;
+        $missing = $contributor === null ? null : $this->missing($contributor);
+        return $missing === null ? null : ($this->labelOf)($missing);
+    }
+
     private function missing(SearchSourceContributor $contributor): ?string
     {
         foreach (['thallo.search', ...$contributor->requiredCapabilities()] as $id) {

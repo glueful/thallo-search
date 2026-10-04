@@ -142,6 +142,17 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
             \Thallo\Search\Lifecycle\Cutover::class => [
                 'shared' => true, 'factory' => [self::class, 'makeCutover'],
             ],
+            \Thallo\Search\Assets\SearchAssetMap::class => [
+                'shared' => true, 'factory' => [self::class, 'makeAssetMap'],
+            ],
+            \Thallo\Search\Assets\SearchAssetController::class => [
+                'class' => \Thallo\Search\Assets\SearchAssetController::class, 'shared' => true, 'autowire' => true,
+            ],
+            \Thallo\Contracts\Search\SearchScopeStatus::class => [
+                'class' => \Thallo\Search\Sources\RegistrySearchScopeStatus::class,
+                'shared' => true,
+                'autowire' => true,
+            ],
         ];
     }
 
@@ -282,6 +293,11 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
         );
     }
 
+    public static function makeAssetMap(ContainerInterface $container): \Thallo\Search\Assets\SearchAssetMap
+    {
+        return new \Thallo\Search\Assets\SearchAssetMap(dirname(__DIR__) . '/assets');
+    }
+
     public static function makeKindAvailability(ContainerInterface $container): \Thallo\Search\Query\KindAvailability
     {
         $registry = $container->get(CapabilityRegistry::class);
@@ -419,6 +435,27 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
     {
         // Package configs are NOT auto-loaded — merge the pack's own tree under 'search'.
         $this->mergeConfig('search', require __DIR__ . '/../config/search.php');
+
+        // Render contributions go in at register time, before any provider boots: a provider that
+        // boots earlier can resolve the Twig stack, which freezes them, and this one boots late.
+        // They are inert while search is off — the reservation must hold either way, the page's
+        // route answers the themed 404, and a Search block's scope reads "Search is off".
+        $container = $context->getContainer();
+        if ($container->has(\Thallo\Render\Contribution\RenderContributionRegistry::class)) {
+            $render = $container->get(\Thallo\Render\Contribution\RenderContributionRegistry::class);
+            $render->registerReservedPaths(new \Thallo\Search\Render\SearchReservedPathContributor());
+            $render->registerTemplatePaths(new \Thallo\Search\Render\SearchTemplatePathContributor());
+            $render->registerStylesheets(new \Thallo\Search\Render\SearchStylesheetContributor());
+        }
+    }
+
+    private function registerBlockType(ApplicationContext $context): void
+    {
+        $container = $context->getContainer();
+        if ($container->has(\Thallo\Contracts\Starter\StarterBlockTypeRegistry::class)) {
+            $container->get(\Thallo\Contracts\Starter\StarterBlockTypeRegistry::class)
+                ->register(new \Thallo\Search\Starter\SearchBlockTypeContributor());
+        }
     }
 
     public function capabilities(): array
@@ -436,6 +473,10 @@ final class SearchServiceProvider extends ServiceProvider implements DeclaresLoa
 
     public function boot(ApplicationContext $context): void
     {
+        // The Search block type, whether or not search is on (search block spec §3.1): its own
+        // `requiresCapability` hides it from the editor while search is off.
+        $this->registerBlockType($context);
+
         // Every kind's metadata is discoverable whether or not search is on (search block spec §3.2):
         // availability is decided from capabilities, never from whether a contributor registered.
         $container = $context->getContainer();

@@ -1,0 +1,29 @@
+{# search — a search field, or an icon that opens one (search block spec §3.1). The markup is the
+   same for every visitor; whether its scope can be searched is part of which features are on,
+   which cached pages are keyed by, so this never goes stale in a cached page. Without JavaScript the
+   field is a real GET form to /search, and the icon a plain link there. #}
+{% set scope = data.scope|default('') %}
+{% set state = search_scope_state(scope) %}
+{% if not state.available %}
+  {% if is_canvas() %}
+<div class="thallo-block thallo-block-search thallo-field-empty">{{ state.label|default('This') }} search isn't available: {{ state.reason }}.</div>
+  {% endif %}
+{% else %}
+{% set display = data.display|default('field') == 'icon' ? 'icon' : 'field' %}
+{% set live = data.live_results is same as(false) ? '0' : '1' %}
+<div class="thallo-block thallo-block-search thallo-block-search--{{ display }}{{ style_classes('root') }}"{{ style_attrs('root') }} data-search-block data-live="{{ live }}" data-scope="{{ scope }}" data-locale="{{ site.locale|default('') }}" data-key="{{ block.dom_key }}">
+  {% if display == 'icon' %}
+  <a class="thallo-block-search__trigger" href="/search?scope={{ scope|url_encode }}&amp;locale={{ site.locale|default('')|url_encode }}" aria-label="Search" aria-expanded="false" aria-controls="thallo-search-panel-{{ block.dom_key }}" data-search-trigger>
+    {# width/height are the size before the stylesheet arrives (blocks cannot reach <head>). #}
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"></circle><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
+  </a>
+  <div id="thallo-search-panel-{{ block.dom_key }}" class="thallo-block-search__panel" data-search-panel hidden>
+    {% include 'search/_form.twig' with {key: block.dom_key, scope: scope, placeholder: data.placeholder|default('Search'), q: ''} %}
+  </div>
+  {% else %}
+  {% include 'search/_form.twig' with {key: block.dom_key, scope: scope, placeholder: data.placeholder|default('Search'), q: ''} %}
+  {% endif %}
+</div>
+<link rel="stylesheet" href="/_thallo/search/search.css">
+<script src="/_thallo/search/search.js" defer></script>
+{% endif %}
