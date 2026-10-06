@@ -11,21 +11,23 @@
 {% else %}
 {% set display = data.display|default('field') == 'icon' ? 'icon' : 'field' %}
 {% set live = data.live_results is same as(false) ? '0' : '1' %}
-{# The block's look lands on its field (the `field` target): the form is shared with /search, so the
-   block hands its classes and attributes down. #}
+{# The block's look lands on its field (the `field` target) and its `button` part on the submit
+   button: the form is shared with /search, so the block hands their classes (and the field's
+   attributes) down. #}
 {% set field_classes = style_classes('field') %}
 {% set field_attrs = style_attrs('field') %}
+{% set button_classes = style_classes('button') %}
 <div class="thallo-block thallo-block-search thallo-block-search--{{ display }}{{ style_classes('root') }}"{{ style_attrs('root') }} data-search-block data-live="{{ live }}" data-scope="{{ scope }}" data-locale="{{ site.locale|default('') }}" data-key="{{ block.dom_key }}">
   {% if display == 'icon' %}
-  <a class="thallo-block-search__trigger" href="/search?scope={{ scope|url_encode }}&amp;locale={{ site.locale|default('')|url_encode }}" aria-label="Search" aria-expanded="false" aria-controls="thallo-search-panel-{{ block.dom_key }}" data-search-trigger>
+  <a class="thallo-block-search__trigger{{ style_classes('icon') }}" href="/search?scope={{ scope|url_encode }}&amp;locale={{ site.locale|default('')|url_encode }}" aria-label="Search" aria-expanded="false" aria-controls="thallo-search-panel-{{ block.dom_key }}" data-search-trigger>
     {# width/height are the size before the stylesheet arrives (blocks cannot reach <head>). #}
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"></circle><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
   </a>
-  <div id="thallo-search-panel-{{ block.dom_key }}" class="thallo-block-search__panel" data-search-panel hidden>
-    {% include 'search/_form.twig' with {key: block.dom_key, scope: scope, placeholder: data.placeholder|default('Search'), q: '', field_classes: field_classes, field_attrs: field_attrs} %}
+  <div id="thallo-search-panel-{{ block.dom_key }}" class="thallo-block-search__panel{{ style_classes('panel') }}" data-search-panel hidden>
+    {% include 'search/_form.twig' with {key: block.dom_key, scope: scope, placeholder: data.placeholder|default('Search'), q: '', field_classes: field_classes, field_attrs: field_attrs, button_classes: button_classes} %}
   </div>
   {% else %}
-  {% include 'search/_form.twig' with {key: block.dom_key, scope: scope, placeholder: data.placeholder|default('Search'), q: '', field_classes: field_classes, field_attrs: field_attrs} %}
+  {% include 'search/_form.twig' with {key: block.dom_key, scope: scope, placeholder: data.placeholder|default('Search'), q: '', field_classes: field_classes, field_attrs: field_attrs, button_classes: button_classes} %}
   {% endif %}
 </div>
 {{ block_script('search') }}

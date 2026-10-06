@@ -49,7 +49,25 @@ final class SearchBlockTypeContributor implements StarterBlockTypeContributor
                         'colors' => 'field', 'border' => 'field', 'radius' => 'field',
                         'shadow' => 'field', 'typography' => 'field',
                     ],
-                ]),
+                ]) + ['parts' => [
+                    // The submit button; in the icon display, the icon that opens the field and the
+                    // drop-down it opens in. Each a look of its own.
+                    'button' => ['label' => 'Button', 'capabilities' => [
+                        'colors', 'border', 'radius', 'shadow', 'typography',
+                        'spacing.padding.top', 'spacing.padding.right',
+                        'spacing.padding.bottom', 'spacing.padding.left',
+                    ]],
+                    'icon' => ['label' => 'Icon', 'capabilities' => [
+                        'colors', 'border', 'radius',
+                        'spacing.padding.top', 'spacing.padding.right',
+                        'spacing.padding.bottom', 'spacing.padding.left',
+                    ]],
+                    'panel' => ['label' => 'Panel', 'capabilities' => [
+                        'colors', 'border', 'radius', 'shadow',
+                        'spacing.padding.top', 'spacing.padding.right',
+                        'spacing.padding.bottom', 'spacing.padding.left',
+                    ]],
+                ]],
             ),
         ];
     }
