@@ -1,9 +1,10 @@
 {# The search form, shared by the Search block and the /search page (search block spec §3.1). A real
    GET form: the scope (empty for every kind) and the page's locale ride along without JavaScript.
-   The visually hidden label is the input's accessible name — the placeholder alone is not one. #}
+   The visually hidden label is the input's accessible name — the placeholder alone is not one. The
+   Search block hands its field's style classes and attributes in; the /search page has none. #}
 <form method="get" action="/search" role="search" class="thallo-search-form">
   <label for="thallo-search-input-{{ key }}" class="sr-only">Search</label>
-  <input id="thallo-search-input-{{ key }}" name="q" type="search" value="{{ q|default('') }}" placeholder="{{ placeholder|default('Search') }}" role="combobox" aria-expanded="false" aria-controls="thallo-search-list-{{ key }}" aria-autocomplete="list" autocomplete="off" class="thallo-search-form__input">
+  <input id="thallo-search-input-{{ key }}" name="q" type="search" value="{{ q|default('') }}" placeholder="{{ placeholder|default('Search') }}" role="combobox" aria-expanded="false" aria-controls="thallo-search-list-{{ key }}" aria-autocomplete="list" autocomplete="off" class="thallo-search-form__input{{ field_classes|default('') }}"{{ field_attrs|default('') }}>
   <input type="hidden" name="scope" value="{{ scope|default('') }}">
   <input type="hidden" name="locale" value="{{ site.locale|default('') }}">
   <button type="submit" class="thallo-search-form__submit">Search</button>

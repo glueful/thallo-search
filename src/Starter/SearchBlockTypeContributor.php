@@ -36,8 +36,20 @@ final class SearchBlockTypeContributor implements StarterBlockTypeContributor
                     ['name' => 'live_results', 'type' => 'boolean'],
                 ],
                 requiresCapability: 'thallo.search',
-                styleCapabilities: ['spacing', 'width', 'visibility', 'layout.item'],
-                styleTargets: StyleTargets::root('box', ['spacing', 'width', 'visibility', 'layout.item']),
+                // The look is the search field's (the `field` target, its input), in both displays;
+                // the block keeps its spacing, width, visibility and placement. Optional: a scope
+                // that cannot be searched renders no field.
+                styleCapabilities: [
+                    'spacing', 'width', 'visibility', 'layout.item',
+                    'colors', 'border', 'radius', 'shadow', 'typography',
+                ],
+                styleTargets: StyleTargets::root('box', ['spacing', 'width', 'visibility', 'layout.item'], [
+                    'targets' => ['field' => ['kind' => 'box', 'optional' => true]],
+                    'map' => [
+                        'colors' => 'field', 'border' => 'field', 'radius' => 'field',
+                        'shadow' => 'field', 'typography' => 'field',
+                    ],
+                ]),
             ),
         ];
     }
