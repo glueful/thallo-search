@@ -1,14 +1,27 @@
 {# The search form, shared by the Search block and the /search page (search block spec §3.1). A real
    GET form: the scope (empty for every kind) and the page's locale ride along without JavaScript.
    The visually hidden label is the input's accessible name — the placeholder alone is not one. The
-   Search block hands in its field's style classes and attributes and its button part's classes;
-   the /search page has none. #}
-<form method="get" action="/search" role="search" class="thallo-search-form">
+   Search block hands in its field's style classes and attributes — the field is the whole control,
+   so they land on the form — and its button part's classes; the /search page has none.
+
+   One rounded control: a magnifier inside (decorative), the input, a Clear button shown once there
+   is text, the `/` shortcut hint where the block asks for it (`shortcut`), and the submit button set
+   into the field — the word "Search", or an arrow (`compact`, the icon display's panel) with the word
+   kept for screen readers. Clear and the hint need JavaScript, so they ship hidden; Clear is for the
+   pointer (text clears from the keyboard anyway), so Tab goes from the field to the submit button. #}
+<form method="get" action="/search" role="search" class="thallo-search-form{% if compact|default(false) %} thallo-search-form--compact{% endif %}{{ field_classes|default('') }}"{{ field_attrs|default('') }}>
+  <svg class="thallo-search-form__lead" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"></circle><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
   <label for="thallo-search-input-{{ key }}" class="sr-only">Search</label>
-  <input id="thallo-search-input-{{ key }}" name="q" type="search" value="{{ q|default('') }}" placeholder="{{ placeholder|default('Search') }}" role="combobox" aria-expanded="false" aria-controls="thallo-search-list-{{ key }}" aria-autocomplete="list" autocomplete="off" class="thallo-search-form__input{{ field_classes|default('') }}"{{ field_attrs|default('') }}>
+  <input id="thallo-search-input-{{ key }}" name="q" type="search" value="{{ q|default('') }}" placeholder="{{ placeholder|default('Search') }}" role="combobox" aria-expanded="false" aria-controls="thallo-search-list-{{ key }}" aria-autocomplete="list" autocomplete="off" class="thallo-search-form__input">
+  <button type="button" class="thallo-search-form__clear" aria-label="Clear search" tabindex="-1" data-search-clear hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg></button>
+  {% if shortcut|default(false) %}<kbd class="thallo-search-form__kbd" aria-hidden="true" data-search-kbd hidden>/</kbd>{% endif %}
   <input type="hidden" name="scope" value="{{ scope|default('') }}">
   <input type="hidden" name="locale" value="{{ site.locale|default('') }}">
+  {% if compact|default(false) %}
+  <button type="submit" class="thallo-search-form__submit{{ button_classes|default('') }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg><span class="sr-only">Search</span></button>
+  {% else %}
   <button type="submit" class="thallo-search-form__submit{{ button_classes|default('') }}">Search</button>
-  <ul id="thallo-search-list-{{ key }}" role="listbox" class="thallo-search-form__list" hidden></ul>
+  {% endif %}
+  <ul id="thallo-search-list-{{ key }}" role="listbox" class="thallo-search-form__list" aria-label="Suggestions" hidden></ul>
   <p class="thallo-search-form__status" role="status" aria-live="polite" data-search-status></p>
 </form>

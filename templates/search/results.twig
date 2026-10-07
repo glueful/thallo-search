@@ -1,50 +1,85 @@
 {# The /search results page (search block spec §3.7). Works without JavaScript; with it, the form's
    input is the same combobox as the Search block's. Snippets arrive as plain segments, escaped here,
-   with <mark> around each match. #}
+   with <mark> around each match.
+
+   The query is the heading and the count sits under it; tabs (one per kind searchable now, after
+   All) are plain scope links. Each result is a row clickable anywhere — its title's link is
+   stretched over it — with a picture when it has one, its kind, its price and two lines of the
+   matching text. A state with nothing to list says what happened and what to do next. #}
 {% extends 'layout.twig' %}
 {% block title %}{% if search.q %}Search results for “{{ search.q }}”{% else %}Search{% endif %} — {{ site.name }}{% endblock %}
 {% block content %}
 <section class="thallo-search-page" aria-labelledby="thallo-search-heading" data-search-block data-live="1" data-scope="{{ search.scope }}" data-locale="{{ search.locale }}" data-key="page">
-  {% if search.state == 'results' %}
-  <h1 id="thallo-search-heading">Results for “{{ search.q }}”</h1>
-  {% elseif search.state == 'no_matches' %}
-  <h1 id="thallo-search-heading">No results for “{{ search.q }}”</h1>
-  {% else %}
-  <h1 id="thallo-search-heading">Search</h1>
-  {% endif %}
+  <header class="thallo-search-page__head">
+    {% if search.state == 'results' %}
+    <h1 id="thallo-search-heading" class="thallo-search-page__title">Results for “{{ search.q }}”</h1>
+    {% elseif search.state == 'no_matches' %}
+    <h1 id="thallo-search-heading" class="thallo-search-page__title">No results for “{{ search.q }}”</h1>
+    {% else %}
+    <h1 id="thallo-search-heading" class="thallo-search-page__title">Search</h1>
+    {% endif %}
 
-  {% include 'search/_form.twig' with {key: 'page', scope: search.scope, placeholder: 'Search', q: search.q} %}
+    {% include 'search/_form.twig' with {key: 'page', scope: search.scope, placeholder: 'Search', q: search.q} %}
+
+    {% if search.tabs|default([]) is not empty and search.q %}
+    <nav class="thallo-search-page__tabs" aria-label="Kind of result">
+      {% for tab in search.tabs %}
+      <a class="thallo-search-page__tab" href="{{ tab.url }}"{% if tab.active %} aria-current="page"{% endif %}>{{ tab.label }}</a>
+      {% endfor %}
+    </nav>
+    {% endif %}
+
+    {% if search.state == 'results' %}
+    <p class="thallo-search-page__count">About {{ search.total }} {{ search.total == 1 ? 'match' : 'matches' }}</p>
+    {% endif %}
+  </header>
 
   {% if search.state == 'rate_limited' %}
-  <p class="thallo-search-page__notice" role="status">Too many searches. Please wait a moment and try again.</p>
+  <div class="thallo-search-page__state" role="status">
+    <p class="thallo-search-page__state-title">Too many searches</p>
+    <p class="thallo-search-page__notice">Wait a moment, then search again.</p>
+  </div>
   {% elseif search.state == 'rebuilding' %}
-  <p class="thallo-search-page__notice" role="status">Search is being rebuilt. Please try again later.</p>
+  <div class="thallo-search-page__state" role="status">
+    <p class="thallo-search-page__state-title">Search is being rebuilt</p>
+    <p class="thallo-search-page__notice">Search is being rebuilt. Please try again later.</p>
+  </div>
   {% elseif search.state == 'unavailable' %}
-  <p class="thallo-search-page__notice" role="status">Search is temporarily unavailable.</p>
+  <div class="thallo-search-page__state" role="status">
+    <p class="thallo-search-page__state-title">Search is unavailable</p>
+    <p class="thallo-search-page__notice">Search is temporarily unavailable.</p>
+  </div>
   {% elseif search.state == 'scope_unavailable' %}
-  <p class="thallo-search-page__notice" role="status">{{ search.scope_label|default('That') }} search isn't available right now.</p>
-  <p><a href="{{ search.everything_url }}">Search everything instead</a></p>
+  <div class="thallo-search-page__state" role="status">
+    <p class="thallo-search-page__state-title">{{ search.scope_label|default('That') }} search isn't available right now</p>
+    <p><a class="thallo-search-page__action" href="{{ search.everything_url }}">Search everything instead</a></p>
+  </div>
   {% elseif search.state == 'no_matches' %}
-  <p class="thallo-search-page__notice">Try other words.</p>
-  {% if not search.all_kinds %}<p><a href="{{ search.everything_url }}">Search everything</a></p>{% endif %}
+  <div class="thallo-search-page__state">
+    <p class="thallo-search-page__notice">Check the spelling, or try fewer or broader words.</p>
+    {% if not search.all_kinds %}<p><a class="thallo-search-page__action" href="{{ search.everything_url }}">Search everything</a></p>{% endif %}
+  </div>
   {% elseif search.state == 'empty_batch' %}
-  <p class="thallo-search-page__notice" role="status">No available results in this batch</p>
+  <div class="thallo-search-page__state" role="status">
+    <p class="thallo-search-page__notice">No available results in this batch</p>
+  </div>
   {% elseif search.state == 'results' %}
-  <p class="thallo-search-page__count">About {{ search.total }} {{ search.total == 1 ? 'match' : 'matches' }}</p>
   <div class="thallo-search-page__results" role="region" aria-labelledby="thallo-search-heading" data-search-results>
     {% for item in search.items %}
-    <article class="thallo-search-result">
-      {% if item.image %}<img class="thallo-search-result__image" src="{{ item.image }}" alt="" loading="lazy" width="64" height="64">{% endif %}
-      <h2 class="thallo-search-result__title"><a href="{{ item.href }}">{{ item.title }}</a></h2>
-      {% if search.all_kinds %}<p class="thallo-search-result__kind">{{ item.kind_label }}</p>{% endif %}
+    <article class="thallo-search-result{% if item.image %} thallo-search-result--media{% endif %}">
+      {% if item.image %}<img class="thallo-search-result__image" src="{{ item.image }}" alt="" loading="lazy" width="72" height="72">{% endif %}
+      <div class="thallo-search-result__body">
+        {% if search.all_kinds %}<p class="thallo-search-result__kind">{{ item.kind_label }}</p>{% endif %}
+        <h2 class="thallo-search-result__title"><a href="{{ item.href }}">{{ item.title }}</a></h2>
+        <p class="thallo-search-result__snippet">{% for part in item.snippet %}{% if part.mark %}<mark>{{ part.text }}</mark>{% else %}{{ part.text }}{% endif %}{% endfor %}</p>
+      </div>
       {% if item.price %}<p class="thallo-search-result__price">{{ item.price }}</p>{% endif %}
-      <p class="thallo-search-result__snippet">{% for part in item.snippet %}{% if part.mark %}<mark>{{ part.text }}</mark>{% else %}{{ part.text }}{% endif %}{% endfor %}</p>
     </article>
     {% endfor %}
   </div>
   {% endif %}
 
-  {% if search.more_url %}<p><a class="thallo-search-page__more" href="{{ search.more_url }}">More results</a></p>{% endif %}
+  {% if search.more_url %}<p class="thallo-search-page__more-row"><a class="thallo-search-page__more" href="{{ search.more_url }}">More results</a></p>{% endif %}
 </section>
 {{ block_script('search') }}
 {% endblock %}

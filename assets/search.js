@@ -74,6 +74,19 @@
       return li;
     }
 
+    var GLYPH_PAGE = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="M7 3h7l4 4v14H7V3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M14 3v4h4" stroke="currentColor" stroke-width="2"/></svg>';
+    var GLYPH_ITEM = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="M6 8h12l-1 12H7L6 8Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 8V6a3 3 0 0 1 6 0v2" stroke="currentColor" stroke-width="2"/></svg>';
+
+    function span(className, text) {
+      var el = document.createElement('span');
+      el.className = className;
+      if (text !== undefined) { el.textContent = text; }
+      return el;
+    }
+
+    // Suggestions are grouped by kind when the block searches every kind, in the order the kinds
+    // first appear (so relevance still leads); a group heading is decoration — each option still
+    // reads its own kind out. A picture leads each row: the result's own, or a glyph for its sort.
     function render(data, q) {
       list.innerHTML = '';
       options = [];
@@ -85,37 +98,66 @@
         return;
       }
       setStatus(state === 'results' ? '' : (MESSAGES[state] || ''));
-      (data.items || []).forEach(function (item, i) {
-        options.push(option(list.id + '-' + i, item.href, function (li) {
-          var title = document.createElement('span');
-          title.className = 'thallo-search-form__title';
-          title.textContent = item.title;
-          li.appendChild(title);
-          if (item.kind_label && scope === '') {
-            var kind = document.createElement('span');
-            kind.className = 'thallo-search-form__kind';
-            kind.textContent = item.kind_label;
-            li.appendChild(kind);
-          }
-          if (item.price) {
-            var price = document.createElement('span');
-            price.className = 'thallo-search-form__price';
-            price.textContent = item.price;
-            li.appendChild(price);
-          }
-          if (item.snippet) {
-            var snippet = document.createElement('span');
-            snippet.className = 'thallo-search-form__snippet';
-            snippet.innerHTML = item.snippet; // the server's escaped text and <mark> tags
-            li.appendChild(snippet);
-          }
-        }));
+      var items = data.items || [];
+      var grouped = scope === '' && items.some(function (item) { return item.kind_label; });
+      var order = [];
+      var groups = {};
+      items.forEach(function (item) {
+        var key = grouped ? (item.kind_label || '') : '';
+        if (!groups.hasOwnProperty(key)) { groups[key] = []; order.push(key); }
+        groups[key].push(item);
       });
-      options.push(option(list.id + '-see-all', data.see_all || ('/search?q=' + encodeURIComponent(q)), function (li) {
+      var rows = [];
+      order.forEach(function (key) {
+        if (grouped && key) {
+          var heading = document.createElement('li');
+          heading.className = 'thallo-search-form__group';
+          heading.setAttribute('role', 'presentation');
+          heading.setAttribute('aria-hidden', 'true');
+          heading.textContent = key;
+          rows.push(heading);
+        }
+        groups[key].forEach(function (item) {
+          var o = option(list.id + '-' + options.length, item.href, function (li) {
+            var thumb = span('thallo-search-form__thumb');
+            if (item.image) {
+              var img = document.createElement('img');
+              img.src = item.image;
+              img.alt = '';
+              img.loading = 'lazy';
+              thumb.appendChild(img);
+            } else {
+              thumb.innerHTML = item.price ? GLYPH_ITEM : GLYPH_PAGE;
+            }
+            li.appendChild(thumb);
+            li.appendChild(span('thallo-search-form__title', item.title));
+            if (item.price) { li.appendChild(span('thallo-search-form__price', item.price)); }
+            if (item.kind_label && scope === '') { li.appendChild(span('thallo-search-form__kind', item.kind_label)); }
+            if (item.snippet) {
+              var snippet = span('thallo-search-form__snippet');
+              snippet.innerHTML = item.snippet; // the server's escaped text and <mark> tags
+              li.appendChild(snippet);
+            }
+          });
+          options.push(o);
+          rows.push(o);
+        });
+      });
+      if (items.length === 0) {
+        var empty = document.createElement('li');
+        empty.className = 'thallo-search-form__empty';
+        empty.setAttribute('role', 'presentation');
+        empty.textContent = 'No matches for “' + q + '”.';
+        rows.push(empty);
+      }
+      var seeAll = option(list.id + '-see-all', data.see_all || ('/search?q=' + encodeURIComponent(q)), function (li) {
         li.className = 'thallo-search-form__see-all';
-        li.textContent = 'See all results for “' + q + '”';
-      }));
-      options.forEach(function (o) { list.appendChild(o); });
+        li.textContent = 'See all results for “' + q + '”'; // the keys hint is the stylesheet's ::after
+      });
+      options.push(seeAll);
+      rows.push(seeAll);
+      list.classList.toggle('thallo-search-form__list--grouped', grouped);
+      rows.forEach(function (row) { list.appendChild(row); });
       list.hidden = false;
       input.setAttribute('aria-expanded', 'true');
     }
@@ -146,6 +188,24 @@
       var mine = seq;
       timer = setTimeout(function () { timer = null; dispatch(mine, q); }, DEBOUNCE);
     });
+    // Clear: shown once there is text; empties the field and puts the caret back.
+    var clear = root.querySelector('[data-search-clear]');
+    function syncClear() { if (clear) { clear.hidden = input.value === ''; } }
+    input.addEventListener('input', syncClear);
+    if (clear) {
+      clear.addEventListener('click', function () {
+        invalidate();
+        input.value = '';
+        syncClear();
+        setStatus('');
+        closeList();
+        input.focus();
+      });
+    }
+    syncClear();
+    // The `/` hint only makes sense once the shortcut works.
+    var kbd = root.querySelector('[data-search-kbd]');
+    if (kbd) { kbd.hidden = false; shortcutTargets.push(input); }
     input.addEventListener('compositionstart', function () { composing = true; });
     input.addEventListener('compositionend', function () { composing = false; });
 
@@ -188,6 +248,9 @@
       }
     }
 
+    var cancel = root.querySelector('[data-search-cancel]');
+    if (cancel) { cancel.addEventListener('click', function () { closePanel(); }); }
+
     if (trigger && panel) {
       trigger.addEventListener('click', function (e) {
         e.preventDefault();
@@ -212,6 +275,18 @@
       }
     });
   }
+
+  // `/` focuses the page's first search field (one that shows the hint), unless typing elsewhere.
+  var shortcutTargets = [];
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) { return; }
+    var t = e.target;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) { return; }
+    var target = shortcutTargets.filter(function (el) { return el.offsetParent !== null; })[0];
+    if (!target) { return; }
+    e.preventDefault();
+    target.focus();
+  });
 
   function init(scopeEl) {
     (scopeEl || document).querySelectorAll('[data-search-block]').forEach(enhance);

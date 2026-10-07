@@ -16,6 +16,7 @@ use Thallo\Render\Layouts\FramePresentation;
 use Thallo\Render\RenderContextExtension;
 use Thallo\Render\SiteContext;
 use Thallo\Render\TwigFactory;
+use Thallo\Search\Query\KindAvailability;
 use Thallo\Search\Query\SearchInput;
 use Thallo\Search\Query\SearchOutcome;
 use Thallo\Search\Query\SearchQueryService;
@@ -98,6 +99,24 @@ final class SearchPageController
             ];
         }
         $link = static fn (array $query): string => '/search?' . http_build_query($query);
+        // One tab per kind searchable now, after "All" — each a plain scope link, so the tabs work
+        // without JavaScript. None when there is only one kind to search.
+        $availability = $this->context->getContainer()->get(KindAvailability::class);
+        $kinds = [];
+        foreach ($this->sources->all() as $kind => $contributor) {
+            if ($availability->isAvailable($kind)) {
+                $kinds[] = [
+                    'label' => $contributor->label(),
+                    'url' => $link(['q' => $input->q, 'scope' => $kind, 'locale' => $input->locale]),
+                    'active' => $scope === $kind,
+                ];
+            }
+        }
+        $tabs = count($kinds) < 2 ? [] : [[
+            'label' => 'All',
+            'url' => $link(['q' => $input->q, 'scope' => '', 'locale' => $input->locale]),
+            'active' => $input->scope->isAll(),
+        ], ...$kinds];
         return $this->render($request, 'search/results.twig', ['search' => [
             'q' => $input->q,
             'scope' => $scope,
@@ -110,6 +129,7 @@ final class SearchPageController
             'more_url' => $outcome->next === null ? null
                 : $link(['q' => $input->q, 'scope' => $scope, 'locale' => $input->locale, 'cursor' => $outcome->next]),
             'everything_url' => $link(['q' => $input->q, 'scope' => '', 'locale' => $input->locale]),
+            'tabs' => $tabs,
         ]], $status, $input->locale);
     }
 

@@ -57,8 +57,9 @@ final class SearchBlockTypeContributor implements StarterBlockTypeContributor
                         'spacing.padding.top', 'spacing.padding.right',
                         'spacing.padding.bottom', 'spacing.padding.left',
                     ]],
+                    // The magnifier is sized in em, so Size scales it.
                     'icon' => ['label' => 'Icon', 'capabilities' => [
-                        'colors', 'border', 'radius',
+                        'typography.size', 'colors', 'border', 'radius',
                         'spacing.padding.top', 'spacing.padding.right',
                         'spacing.padding.bottom', 'spacing.padding.left',
                     ]],

@@ -1,24 +1,237 @@
-/* The Search block and the /search page (search block spec §3.1, §3.7): baseline layout only — the
-   theme's tokens and style classes carry the look. */
+/* The Search block and the /search page (search block spec §3.1, §3.7). Delivered inside
+   @layer theme, so every style setting (@layer settings) wins over it.
+
+   Built from the theme's tokens, each with a fallback for a theme that names none: the field and
+   its buttons take the theme's button corners (--radius-btn, set by Appearance › Corners), the
+   panel, list and results its card corners (--radius). */
+.thallo-block-search,
+.thallo-search-page {
+  --search-bg: var(--bg, Canvas);
+  --search-surface: var(--surface, color-mix(in srgb, currentColor 5%, transparent));
+  --search-surface-2: var(--surface-2, color-mix(in srgb, currentColor 9%, transparent));
+  --search-ink: var(--ink, currentColor);
+  --search-muted: var(--muted, color-mix(in srgb, currentColor 62%, transparent));
+  --search-line: var(--line, color-mix(in srgb, currentColor 16%, transparent));
+  --search-accent: var(--accent, currentColor);
+  --search-accent-ink: var(--accent-ink, Canvas);
+  --search-pill: var(--radius-btn, 999px);
+  --search-card: var(--radius, 12px);
+  --search-pop: 0 12px 32px -8px color-mix(in srgb, #0f172a 24%, transparent), 0 2px 6px color-mix(in srgb, #0f172a 8%, transparent);
+  --search-mark: color-mix(in srgb, var(--search-accent) 18%, transparent);
+}
 .thallo-block-search { position: relative; }
-.thallo-search-form { position: relative; display: flex; gap: 0.5rem; align-items: center; }
-.thallo-search-form__input { flex: 1 1 auto; min-width: 0; }
+/* `hidden` is authoritative: an author display rule would otherwise beat the browser's own
+   [hidden] { display: none } on everything the script shows and hides. */
+.thallo-search-form__clear[hidden],
+.thallo-search-form__kbd[hidden],
+.thallo-search-form__list[hidden],
+.thallo-block-search__panel[hidden] { display: none; }
+.thallo-block-search .sr-only,
+.thallo-search-page .sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* ── The field: one rounded control (the `field` style target) ─────────────────────────────── */
+.thallo-search-form {
+  position: relative; display: flex; align-items: center; gap: 0.25rem; width: 100%;
+  min-height: 2.75rem; padding: 0.25rem; padding-inline-start: 0.875rem;
+  background: var(--search-surface); color: var(--search-ink);
+  border: 1px solid var(--search-line); border-radius: var(--search-pill);
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+.thallo-search-form:hover { border-color: color-mix(in srgb, var(--search-ink) 24%, var(--search-line)); }
+.thallo-search-form:focus-within {
+  background: var(--search-bg); border-color: var(--search-accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--search-accent) 24%, transparent);
+}
+.thallo-search-form__lead { flex: none; width: 1.125em; height: 1.125em; color: var(--search-muted); }
+.thallo-search-form__input {
+  flex: 1 1 auto; min-width: 0; height: 2.25rem; padding: 0 0.25rem; margin: 0;
+  border: 0; outline: 0; background: transparent; color: inherit; font: inherit; font-size: 1rem;
+  -webkit-appearance: none; appearance: none;
+}
+.thallo-search-form__input::placeholder { color: var(--search-muted); opacity: 1; }
+.thallo-search-form__input::-webkit-search-cancel-button,
+.thallo-search-form__input::-webkit-search-decoration { -webkit-appearance: none; appearance: none; }
+.thallo-search-form__clear {
+  flex: none; display: inline-grid; place-items: center; width: 2rem; height: 2rem; padding: 0;
+  border: 0; border-radius: 999px; background: transparent; color: var(--search-muted); cursor: pointer;
+}
+.thallo-search-form__clear:hover { background: var(--search-surface-2); color: var(--search-ink); }
+.thallo-search-form__kbd {
+  flex: none; margin-inline-end: 0.25rem; padding: 0 0.375rem; font: 500 0.75rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--search-muted); border: 1px solid var(--search-line); border-bottom-width: 2px; border-radius: 0.375rem;
+}
+.thallo-search-form:focus-within .thallo-search-form__kbd { display: none; }
+.thallo-search-form__submit {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem;
+  height: 2.25rem; padding: 0 1rem; border: 0; border-radius: var(--search-pill);
+  background: var(--search-accent); color: var(--search-accent-ink);
+  font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: background-color .15s ease;
+}
+.thallo-search-form__submit:hover { background: color-mix(in srgb, var(--search-accent) 86%, var(--search-ink)); }
+.thallo-search-form--compact .thallo-search-form__submit { width: 2.25rem; padding: 0; }
+.thallo-search-form__submit svg { width: 1.125em; height: 1.125em; }
+.thallo-search-form__clear:focus-visible,
+.thallo-search-form__submit:focus-visible { outline: 2px solid var(--search-accent); outline-offset: 2px; }
+
+/* ── Suggestions ───────────────────────────────────────────────────────────────────────────── */
 .thallo-search-form__list {
-  position: absolute; z-index: 30; top: 100%; left: 0; right: 0; margin: 0.25rem 0 0; padding: 0.25rem 0;
-  list-style: none; background: var(--thallo-surface, #fff); color: inherit;
-  border: 1px solid color-mix(in srgb, currentColor 15%, transparent); border-radius: 0.5rem;
+  position: absolute; z-index: 30; top: calc(100% + 0.5rem); left: 0; right: 0;
+  max-height: min(26rem, 70vh); overflow: auto; margin: 0; padding: 0.375rem; list-style: none;
+  background: var(--search-bg); color: var(--search-ink);
+  border: 1px solid var(--search-line); border-radius: var(--search-card); box-shadow: var(--search-pop);
+  text-align: start;
 }
-.thallo-search-form__list [role="option"] { display: block; padding: 0.5rem 0.75rem; cursor: pointer; }
-.thallo-search-form__list [role="option"][aria-selected="true"] { background: color-mix(in srgb, currentColor 8%, transparent); }
-.thallo-search-form__list mark { background: none; color: inherit; font-weight: 600; }
+.thallo-search-form__group {
+  padding: 0.625rem 0.625rem 0.25rem; font-size: 0.7rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.07em; color: var(--search-muted);
+}
+.thallo-search-form__list [role="option"] {
+  display: grid; grid-template-columns: 2.5rem minmax(0, 1fr) auto; column-gap: 0.75rem; align-items: center;
+  padding: 0.5rem 0.625rem; border-radius: 0.5rem; cursor: pointer;
+}
+.thallo-search-form__list [role="option"][aria-selected="true"],
+.thallo-search-form__list [role="option"]:hover { background: var(--search-surface-2); }
+.thallo-search-form__thumb {
+  grid-row: span 2; width: 2.5rem; height: 2.5rem; border-radius: 0.5rem; overflow: hidden;
+  display: grid; place-items: center; background: var(--search-surface-2); color: var(--search-muted);
+}
+.thallo-search-form__thumb img { width: 100%; height: 100%; object-fit: cover; }
+.thallo-search-form__thumb svg { width: 1.125rem; height: 1.125rem; }
+.thallo-search-form__title { min-width: 0; font-weight: 600; font-size: 0.93rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thallo-search-form__price { grid-row: span 2; font-weight: 600; font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+.thallo-search-form__snippet { grid-column: 2; min-width: 0; font-size: 0.82rem; color: var(--search-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Grouped under a heading, the kind is read out but not shown again. */
+.thallo-search-form__list--grouped .thallo-search-form__kind {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap;
+}
+.thallo-search-form__kind { grid-column: 2; font-size: 0.75rem; color: var(--search-muted); }
+.thallo-search-form__list mark,
+.thallo-search-result mark { background: var(--search-mark); color: inherit; border-radius: 3px; padding: 0 1px; font-weight: inherit; }
+.thallo-search-form__list .thallo-search-form__see-all {
+  display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
+  margin-top: 0.25rem; padding: 0.625rem; border-top: 1px solid var(--search-line); border-radius: 0 0 0.5rem 0.5rem;
+  color: var(--search-accent); font-weight: 600; font-size: 0.88rem;
+}
+/* Decoration, not content: drawn by the stylesheet, so the option's name stays "See all results…". */
+.thallo-search-form__list .thallo-search-form__see-all::after {
+  content: "↑↓ move · ↵ open · esc close"; color: var(--search-muted); font-weight: 400; font-size: 0.75rem; white-space: nowrap;
+}
+@media (max-width: 32rem), (hover: none) { .thallo-search-form__list .thallo-search-form__see-all::after { content: none; } }
 .thallo-search-form__status:empty { display: none; }
-.thallo-block-search__trigger { display: inline-flex; align-items: center; color: inherit; }
-.thallo-block-search__trigger svg { width: 1.25rem; height: 1.25rem; }
-.thallo-block-search__panel {
-  position: absolute; z-index: 30; right: 0; top: 100%; width: min(28rem, calc(100vw - 2rem)); padding: 0.75rem;
-  background: var(--thallo-surface, #fff); border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
-  border-radius: 0.5rem;
+/* With the list open, it carries any message itself; the status stays announced but unseen. */
+.thallo-search-form__list:not([hidden]) ~ .thallo-search-form__status {
+  position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; box-shadow: none;
 }
+.thallo-search-form__empty { padding: 0.875rem 0.625rem; font-size: 0.9rem; color: var(--search-muted); }
+.thallo-search-form__status {
+  position: absolute; z-index: 30; top: calc(100% + 0.5rem); left: 0; right: 0; margin: 0;
+  padding: 0.875rem 1rem; font-size: 0.9rem; color: var(--search-muted);
+  background: var(--search-bg); border: 1px solid var(--search-line); border-radius: var(--search-card); box-shadow: var(--search-pop);
+}
+
+/* ── The icon display: a round button and its panel ─────────────────────────────────────────── */
+/* A flex box, so the button sits centred however tall its row is — no stray line-height below it. */
+.thallo-block-search--icon { display: flex; align-items: center; }
+.thallo-block-search__trigger {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  font-size: 1rem; width: 2.75em; height: 2.75em; border-radius: 999px;
+  color: inherit; text-decoration: none; transition: background-color .15s ease;
+}
+.thallo-block-search__trigger:hover,
+.thallo-block-search__trigger[aria-expanded="true"] { background: color-mix(in srgb, currentColor 9%, transparent); }
+.thallo-block-search__trigger:focus-visible { outline: 2px solid var(--search-accent); outline-offset: 2px; }
+/* In em: the Icon part's Size scales the magnifier (and its button with it). */
+.thallo-block-search__glyph { width: 1.25em; height: 1.25em; }
+.thallo-block-search__panel {
+  position: absolute; z-index: 30; top: calc(100% + 0.625rem); right: 0;
+  width: min(30rem, calc(100vw - 2rem)); padding: 0.75rem;
+  background: var(--search-bg); color: var(--search-ink);
+  border: 1px solid var(--search-line); border-radius: var(--search-card); box-shadow: var(--search-pop);
+}
+.thallo-block-search__sheet { display: flex; align-items: center; gap: 0.5rem; }
+.thallo-block-search__sheet .thallo-search-form { flex: 1 1 auto; }
+.thallo-block-search__panel .thallo-search-form__list,
+.thallo-block-search__panel .thallo-search-form__status {
+  position: static; margin-top: 0.5rem; max-height: min(20rem, 60vh); padding: 0; border: 0; box-shadow: none;
+}
+.thallo-block-search__cancel { display: none; }
 @media (max-width: 40rem) {
-  .thallo-block-search__panel { position: fixed; left: 1rem; right: 1rem; width: auto; }
+  /* A sheet across the top of the screen, so the keyboard never covers the suggestions. */
+  .thallo-block-search__panel {
+    position: fixed; top: 0; left: 0; right: 0; width: auto; padding: 0.75rem;
+    border-width: 0 0 1px; border-radius: 0 0 var(--search-card) var(--search-card);
+  }
+  .thallo-block-search__panel .thallo-search-form__list { max-height: 70vh; }
+  .thallo-block-search__cancel {
+    display: inline-block; flex: none; padding: 0.5rem 0.25rem; border: 0; background: none;
+    color: var(--search-accent); font: inherit; font-weight: 600; cursor: pointer;
+  }
+}
+
+/* ── The /search page ──────────────────────────────────────────────────────────────────────── */
+.thallo-search-page {
+  max-width: var(--content, 46rem); margin-inline: auto; padding-block: var(--space-5, 2.5rem);
+  display: grid; gap: 1.5rem; color: var(--search-ink);
+}
+.thallo-search-page__head { display: grid; gap: 1rem; }
+.thallo-search-page__title { margin: 0; font-size: clamp(1.5rem, 3vw, 1.85rem); line-height: 1.2; letter-spacing: -0.015em; text-wrap: balance; }
+.thallo-search-page__tabs { display: flex; flex-wrap: wrap; gap: 0 1.25rem; border-bottom: 1px solid var(--search-line); }
+.thallo-search-page__tab {
+  padding: 0.625rem 0.125rem; margin-bottom: -1px; border-bottom: 2px solid transparent;
+  color: var(--search-muted); font-weight: 600; font-size: 0.9rem; text-decoration: none;
+}
+.thallo-search-page__tab:hover { color: var(--search-ink); }
+.thallo-search-page__tab[aria-current="page"] { color: var(--search-ink); border-bottom-color: var(--search-accent); }
+.thallo-search-page__count { margin: 0; font-size: 0.9rem; color: var(--search-muted); font-variant-numeric: tabular-nums; }
+.thallo-search-page__results { display: grid; gap: 0.25rem; }
+.thallo-search-result {
+  position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.25rem 1rem; align-items: center;
+  padding: 0.875rem; border-radius: var(--search-card); transition: background-color .15s ease;
+}
+.thallo-search-result--media { grid-template-columns: 4.5rem minmax(0, 1fr) auto; }
+.thallo-search-result:hover { background: var(--search-surface); }
+.thallo-search-result__image { width: 4.5rem; height: 4.5rem; border-radius: 0.625rem; object-fit: cover; background: var(--search-surface-2); }
+.thallo-search-result__body { display: grid; gap: 0.25rem; min-width: 0; }
+.thallo-search-result__kind {
+  justify-self: start; margin: 0; padding: 0.125rem 0.5rem; border-radius: 999px;
+  font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--search-accent); background: color-mix(in srgb, var(--search-accent) 10%, transparent);
+}
+.thallo-search-result__title { margin: 0; font-size: 1.06rem; line-height: 1.35; font-weight: 600; }
+.thallo-search-result__title a { color: inherit; text-decoration: none; }
+/* The title's link covers the row: the whole result is one click target, one tab stop. */
+.thallo-search-result__title a::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+.thallo-search-result:hover .thallo-search-result__title a { color: var(--search-accent); }
+.thallo-search-result__title a:focus-visible { outline: none; }
+.thallo-search-result:focus-within { box-shadow: 0 0 0 2px var(--search-accent); }
+.thallo-search-result__snippet {
+  margin: 0; font-size: 0.9rem; line-height: 1.5; color: var(--search-muted);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.thallo-search-result__price { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+@media (max-width: 32rem) {
+  .thallo-search-result--media { grid-template-columns: 3.5rem minmax(0, 1fr); }
+  .thallo-search-result__image { width: 3.5rem; height: 3.5rem; grid-row: span 2; align-self: start; }
+  .thallo-search-result__price { grid-column: -2; }
+}
+.thallo-search-page__state {
+  display: grid; gap: 0.5rem; padding: 1.5rem; border: 1px solid var(--search-line); border-radius: var(--search-card);
+}
+.thallo-search-page__state p { margin: 0; }
+.thallo-search-page__state-title { font-weight: 600; font-size: 1.05rem; }
+.thallo-search-page__notice { color: var(--search-muted); }
+.thallo-search-page__action,
+.thallo-search-page__more {
+  display: inline-block; padding: 0.5rem 1.25rem; border: 1px solid var(--search-line); border-radius: var(--search-pill);
+  background: var(--search-surface); color: var(--search-ink); font-weight: 600; font-size: 0.9rem; text-decoration: none;
+}
+.thallo-search-page__action:hover,
+.thallo-search-page__more:hover { background: var(--search-surface-2); }
+.thallo-search-page__more-row { margin: 0; text-align: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .thallo-search-form, .thallo-search-form__submit, .thallo-block-search__trigger, .thallo-search-result { transition: none; }
 }
