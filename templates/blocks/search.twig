@@ -28,9 +28,11 @@
   {# A card under the header; on a phone, a sheet across the top whose Cancel closes it. #}
   <div id="thallo-search-panel-{{ block.dom_key }}" class="thallo-block-search__panel{{ style_classes('panel') }}" data-search-panel hidden>
     <div class="thallo-block-search__sheet">
-      {% include 'search/_form.twig' with {key: block.dom_key, scope: scope, placeholder: data.placeholder|default('Search'), q: '', compact: true, field_classes: field_classes, field_attrs: field_attrs, button_classes: button_classes} %}
+      {% include 'search/_form.twig' with {key: block.dom_key, scope: scope, placeholder: data.placeholder|default('Search'), q: '', compact: true, suggestions_after: true, field_classes: field_classes, field_attrs: field_attrs, button_classes: button_classes} %}
       <button type="button" class="thallo-block-search__cancel" data-search-cancel>Cancel</button>
     </div>
+    {# Under the field, across the panel — not inside the field's row. #}
+    {% include 'search/_suggestions.twig' with {key: block.dom_key} only %}
   </div>
   {% else %}
   {% include 'search/_form.twig' with {key: block.dom_key, scope: scope, placeholder: data.placeholder|default('Search'), q: '', shortcut: true, field_classes: field_classes, field_attrs: field_attrs, button_classes: button_classes} %}

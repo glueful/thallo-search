@@ -71,8 +71,9 @@
   font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: background-color .15s ease;
 }
 .thallo-search-form__submit:hover { background: color-mix(in srgb, var(--search-accent) 86%, var(--search-ink)); }
-.thallo-search-form--compact .thallo-search-form__submit { width: 2.25rem; padding: 0; }
-.thallo-search-form__submit svg { width: 1.125em; height: 1.125em; }
+/* At least round; padding from the Button section widens it instead of squeezing the arrow. */
+.thallo-search-form--compact .thallo-search-form__submit { min-width: 2.25rem; padding: 0; }
+.thallo-search-form__submit svg { flex: none; width: 1.125em; height: 1.125em; }
 .thallo-search-form__clear:focus-visible,
 .thallo-search-form__submit:focus-visible { outline: 2px solid var(--search-accent); outline-offset: 2px; }
 
@@ -157,6 +158,7 @@
 .thallo-block-search__panel .thallo-search-form__status {
   position: static; margin-top: 0.5rem; max-height: min(20rem, 60vh); padding: 0; border: 0; box-shadow: none;
 }
+.thallo-block-search__panel .thallo-search-form__status { padding: 0.25rem 0.875rem 0.125rem; }
 .thallo-block-search__cancel { display: none; }
 @media (max-width: 40rem) {
   /* A sheet across the top of the screen, so the keyboard never covers the suggestions. */
