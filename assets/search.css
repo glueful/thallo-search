@@ -174,8 +174,10 @@
 }
 
 /* ── The /search page ──────────────────────────────────────────────────────────────────────── */
+/* The side gutter is the shop pages' (shop.css .shop-category): the layout's <main> has none. */
 .thallo-search-page {
-  max-width: var(--content, 46rem); margin-inline: auto; padding-block: var(--space-5, 2.5rem);
+  max-width: var(--content, 46rem); margin-inline: auto;
+  padding-block: var(--space-5, 2.5rem); padding-inline: var(--space-4, 1.5rem);
   display: grid; gap: 1.5rem; color: var(--search-ink);
 }
 .thallo-search-page__head { display: grid; gap: 1rem; }
